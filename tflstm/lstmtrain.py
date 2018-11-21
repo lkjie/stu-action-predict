@@ -5,12 +5,12 @@ __author__ = 'liwenjie'
 
 import os
 import sys
-from dateutil.parser import parse
 import pandas as pd
 import numpy as np
-import datetime as dt
 import tensorflow as tf
 import numbers
+from tensorflow.python.ops import array_ops
+from tensorflow.python import debug as tf_debug
 
 # sys.path.append(os.path.dirname(os.path.realpath(__file__))+os.sep+'..')
 from tflstm.dataset import build_model_columns
@@ -18,24 +18,28 @@ from tflstm.dataset import input_fn
 from tflstm.logger import BaseBenchmarkLogger
 from tflstm.dataset import _LABEL_NUM
 
-tf.logging.set_verbosity(tf.logging.INFO)
-
-test_file = 'data/tf_test.csv'
-eva_file = 'data/tf_val.csv'
-train_file = 'data/tf_train.csv'
-train = pd.read_csv('data/consum_cleaned.csv')
-train_features = [_f for _f in train.columns if _f is not 'placei']
+FLAGS = tf.flags.FLAGS
+DEBUG = FLAGS.is_debug
+test_file = FLAGS.test_file
+eva_file = FLAGS.eva_file
+train_file = FLAGS.train_file
+all_data_num = FLAGS.all_data_num
+MODEL_DIR = FLAGS.model_dir
+eval_hooks = []
+debug_url = FLAGS.debug_url
+if DEBUG:
+    # train_hooks = train_hooks + [tf_debug.TensorBoardDebugHook(debug_url)]
+    eval_hooks = [tf_debug.TensorBoardDebugHook(debug_url)]
 
 batch_size = 128
 num_epoch = 5
-train_steps = int(2 * train.shape[0] * 0.7)
+train_steps = int(2 * all_data_num * 0.7)
 steps_between_evals = 1000
 deep_columns = build_model_columns()
 hidden_units = [1000, 500, 150, 104]
 '''
 batch_size, timestep_size, input_size = 128, 1 ,?
 '''
-
 
 
 def past_stop_threshold(stop_threshold, eval_metric):
@@ -70,14 +74,40 @@ def past_stop_threshold(stop_threshold, eval_metric):
     return False
 
 
-run_config = tf.estimator.RunConfig().replace(session_config=tf.ConfigProto(device_count={"CPU": 4, 'GPU': 0},
-                                                                            inter_op_parallelism_threads=0,
-                                                                            intra_op_parallelism_threads=0))
+def focal_loss(prediction_tensor, target_tensor, weights=None, alpha=0.25, gamma=2):
+    r"""Compute focal loss for predictions.
+        Multi-labels Focal loss formula:
+            FL = -alpha * (z-p)^gamma * log(p) -(1-alpha) * p^gamma * log(1-p)
+                 ,which alpha = 0.25, gamma = 2, p = sigmoid(x), z = target_tensor.
+    Args:
+     prediction_tensor: A float tensor of shape [batch_size, num_anchors,
+        num_classes] representing the predicted logits for each class
+     target_tensor: A float tensor of shape [batch_size, num_anchors,
+        num_classes] representing one-hot encoded classification targets
+     weights: A float tensor of shape [batch_size, num_anchors]
+     alpha: A scalar tensor for focal loss alpha hyper-parameter
+     gamma: A scalar tensor for focal loss gamma hyper-parameter
+    Returns:
+        loss: A (scalar) tensor representing the value of the loss function
+    """
+    sigmoid_p = tf.nn.sigmoid(prediction_tensor)
+    zeros = array_ops.zeros_like(sigmoid_p, dtype=sigmoid_p.dtype)
 
-'''定义LSTM模型'''
+    # For positive prediction, only need consider front part loss, back part is 0;
+    # target_tensor > zeros <=> z=1, so positive coefficient = z - p.
+    pos_p_sub = array_ops.where(target_tensor > zeros, target_tensor - sigmoid_p, zeros)
+
+    # For negative prediction, only need consider back part loss, front part is 0;
+    # target_tensor > zeros <=> z=1, so negative coefficient = 0.
+    neg_p_sub = array_ops.where(target_tensor > zeros, zeros, sigmoid_p)
+    per_entry_cross_ent = - alpha * (pos_p_sub ** gamma) * tf.log(tf.clip_by_value(sigmoid_p, 1e-8, 1.0)) \
+                          - (1 - alpha) * (neg_p_sub ** gamma) * tf.log(tf.clip_by_value(1.0 - sigmoid_p, 1e-8, 1.0))
+    return tf.reduce_sum(per_entry_cross_ent)
 
 
 def lstm_model(X, y):
+    '''定义LSTM模型'''
+
     def lstm_cell(cell_size, keep_prob, num_proj):
         # return tf.nn.rnn_cell.DropoutWrapper(tf.nn.rnn_cell.LSTMCell(cell_size, num_proj=min(cell_size, num_proj)), output_keep_prob=keep_prob)
         return tf.nn.rnn_cell.DropoutWrapper(tf.nn.rnn_cell.LSTMCell(cell_size), output_keep_prob=keep_prob)
@@ -105,8 +135,11 @@ def lstm_model(X, y):
     # predictions = tf.reshape(predictions, [-1])
 
     '''定义损失函数，这里为正常的均方误差'''
-    loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=pred_logits, name='cross_entropy_loss')
-    cost = tf.reduce_mean(loss, name='cross_entropy_loss_mean')
+    y_onehot = tf.one_hot(y, depth=_LABEL_NUM)
+    pred_logits = tf.nn.softmax(pred_logits, axis=1)
+    loss = focal_loss(prediction_tensor=pred_logits, target_tensor=y_onehot)
+    # loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=y, logits=pred_logits, name='cross_entropy_loss')
+    # loss = tf.reduce_mean(loss, name='focal_loss_mean')
 
 
     '''定义优化器各参数'''
@@ -114,13 +147,12 @@ def lstm_model(X, y):
     #                                            tf.contrib.framework.get_global_step(),
     #                                            optimizer='Adagrad',
     #                                            learning_rate=0.2)
-    train_op = tf.train.AdamOptimizer(learning_rate=0.01).minimize(cost, global_step=tf.train.get_global_step())
+    train_op = tf.train.AdamOptimizer(learning_rate=0.01).minimize(loss, global_step=tf.train.get_global_step())
     '''返回预测值、损失函数及优化器'''
-    return pred_logits, cost, train_op
+    return pred_logits, loss, train_op
 
 
 def model_fn(features, labels, mode, params=None):
-    # prediction = tf.feature_column.linear_model(features, params['feature_columns'])
     x = tf.feature_column.input_layer(features, params['feature_columns'])
     x = tf.reshape(x, [-1, 1, x.shape[1]])
     pred_logits, loss, train_op = lstm_model(x, labels)
@@ -129,11 +161,10 @@ def model_fn(features, labels, mode, params=None):
         return tf.estimator.EstimatorSpec(mode=mode, predictions={"result": pred_logits})
     eval_metric_ops = {
         "accuracy": tf.metrics.accuracy(predictions=predict, labels=labels),
-        "recall": tf.metrics.recall(labels=labels, predictions=predict),
-        "P@1": tf.metrics.precision_at_k(predictions=pred_logits, labels=labels, k=3),
-        "P@3": tf.metrics.precision_at_k(labels=labels, predictions=pred_logits, k=3),
-        "P@5": tf.metrics.precision_at_k(labels=labels, predictions=pred_logits, k=3),
-        "P@10": tf.metrics.precision_at_k(labels=labels, predictions=pred_logits, k=3),
+        "top@1": tf.metrics.mean(tf.nn.in_top_k(predictions=pred_logits, targets=labels, k=1)),
+        "top@3": tf.metrics.mean(tf.nn.in_top_k(predictions=pred_logits, targets=labels, k=3)),
+        "top@5": tf.metrics.mean(tf.nn.in_top_k(predictions=pred_logits, targets=labels, k=5)),
+        "top@10": tf.metrics.mean(tf.nn.in_top_k(predictions=pred_logits, targets=labels, k=10)),
     }
     return tf.estimator.EstimatorSpec(
         mode=mode,
@@ -142,44 +173,45 @@ def model_fn(features, labels, mode, params=None):
         eval_metric_ops=eval_metric_ops)
 
 
-eva_input_fn = lambda: input_fn(eva_file, 1, False, batch_size)
-train_input_fn = lambda: input_fn(train_file, num_epoch, True, batch_size)
-test_input_fn = lambda: input_fn(test_file, 1, False, batch_size)
-eva_input_fn_c = lambda: input_fn(eva_file, 1, False, batch_size, is_classification=True)
-train_input_fn_c = lambda: input_fn(train_file, num_epoch, True, batch_size, is_classification=True)
-test_input_fn_c = lambda: input_fn(test_file, 1, False, batch_size, is_classification=True)
-
-tensors_to_log = {
-    # 'average_loss': 'cross_entropy_loss_mean',
-    # 'loss': 'cross_entropy_loss/cross_entropy_loss'
-}
-train_hooks = [tf.train.LoggingTensorHook(tensors=tensors_to_log, every_n_iter=100)]
-# train_hooks = train_hooks + [tf_debug.LocalCLIDebugHook()]
-# train_hooks = train_hooks + [tf_debug.TensorBoardDebugHook("localhost:6064")]
-
-
-early_stop = False
-run_params = {
-    'batch_size': batch_size,
-    'train_steps': train_steps,
-    'model_type': 'lstm',
-    'feature_columns': deep_columns
-}
-estimator_c = tf.estimator.Estimator(model_fn=model_fn, config=run_config, params=run_params, warm_start_from=None)
-benchmark_logger = BaseBenchmarkLogger()
-benchmark_logger.log_run_info('wide_deep', "Census Income", run_params, test_id=None)
-for n in range(train_steps // steps_between_evals):
-    estimator_c.train(input_fn=train_input_fn_c, hooks=train_hooks, steps=500)
-    results = estimator_c.evaluate(input_fn=eva_input_fn_c)
-    # Display evaluation metrics
-    tf.logging.info('Results at step %d / %d', (n + 1) * steps_between_evals, train_steps)
-    tf.logging.info('-' * 60)
-    # for key in sorted(results):
-    #     tf.logging.info('%s: %s' % (key, results[key]))
-    benchmark_logger.log_evaluation_result(results)
-    if early_stop and past_stop_threshold(None, results['loss']):
-        break
-res = estimator_c.predict(test_input_fn)
-lres = [p['predictions'] for p in res]
-nres = np.array(lres)
-np.save('tflstm/nnres_c.npy', nres)
+def train():
+    run_config = tf.estimator.RunConfig().replace(session_config=tf.ConfigProto(device_count={"CPU": 4, 'GPU': 0},
+                                                                                inter_op_parallelism_threads=0,
+                                                                                intra_op_parallelism_threads=0))
+    eva_input_fn = lambda: input_fn(eva_file, 1, False, batch_size)
+    train_input_fn = lambda: input_fn(train_file, num_epoch, True, batch_size)
+    test_input_fn = lambda: input_fn(test_file, 1, False, batch_size)
+    eva_input_fn_c = lambda: input_fn(eva_file, 1, False, batch_size, is_classification=True)
+    train_input_fn_c = lambda: input_fn(train_file, num_epoch, True, batch_size, is_classification=True)
+    test_input_fn_c = lambda: input_fn(test_file, 1, False, batch_size, is_classification=True)
+    tensors_to_log = {
+        # 'average_loss': 'cross_entropy_loss_mean',
+        # 'loss': 'cross_entropy_loss/cross_entropy_loss'
+    }
+    train_hooks = [tf.train.LoggingTensorHook(tensors=tensors_to_log, every_n_iter=100)]
+    # train_hooks = train_hooks + [tf_debug.LocalCLIDebugHook()]
+    early_stop = False
+    run_params = {
+        'batch_size': batch_size,
+        'train_steps': train_steps,
+        'model_type': 'lstm',
+        'feature_columns': deep_columns
+    }
+    estimator_c = tf.estimator.Estimator(model_fn=model_fn, config=run_config, params=run_params, warm_start_from=None,
+                                         model_dir=MODEL_DIR)
+    benchmark_logger = BaseBenchmarkLogger()
+    benchmark_logger.log_run_info('wide_deep', "Census Income", run_params, test_id=None)
+    for n in range(train_steps // steps_between_evals):
+        estimator_c.train(input_fn=train_input_fn_c, hooks=train_hooks, steps=500)
+        results = estimator_c.evaluate(input_fn=eva_input_fn_c, hooks=eval_hooks)
+        # Display evaluation metrics
+        tf.logging.info('Results at step %d / %d', (n + 1) * steps_between_evals, train_steps)
+        tf.logging.info('-' * 60)
+        # for key in sorted(results):
+        #     tf.logging.info('%s: %s' % (key, results[key]))
+        benchmark_logger.log_evaluation_result(results)
+        if early_stop and past_stop_threshold(None, results['loss']):
+            break
+    res = estimator_c.predict(test_input_fn_c)
+    lres = [p['predictions'] for p in res]
+    nres = np.array(lres)
+    np.save('tflstm/nnres_c.npy', nres)
