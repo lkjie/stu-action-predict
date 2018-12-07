@@ -161,16 +161,25 @@ def model_fn(features, labels, mode, params=None):
         return tf.estimator.EstimatorSpec(mode=mode, predictions={"result": pred_logits})
     eval_metric_ops = {
         "accuracy": tf.metrics.accuracy(predictions=predict, labels=labels),
-        "top@1": tf.metrics.mean(tf.nn.in_top_k(predictions=pred_logits, targets=labels, k=1)),
-        "top@3": tf.metrics.mean(tf.nn.in_top_k(predictions=pred_logits, targets=labels, k=3)),
-        "top@5": tf.metrics.mean(tf.nn.in_top_k(predictions=pred_logits, targets=labels, k=5)),
-        "top@10": tf.metrics.mean(tf.nn.in_top_k(predictions=pred_logits, targets=labels, k=10)),
+        "top@1": tf.metrics.mean(tf.nn.in_top_k(predictions=pred_logits, targets=labels, k=1), name='top1'),
+        "top@3": tf.metrics.mean(tf.nn.in_top_k(predictions=pred_logits, targets=labels, k=3), name='top3'),
+        "top@5": tf.metrics.mean(tf.nn.in_top_k(predictions=pred_logits, targets=labels, k=5), name='top5'),
+        "top@10": tf.metrics.mean(tf.nn.in_top_k(predictions=pred_logits, targets=labels, k=10), name='top10'),
     }
     return tf.estimator.EstimatorSpec(
         mode=mode,
         loss=loss,
         train_op=train_op,
         eval_metric_ops=eval_metric_ops)
+
+
+class EvalStepHook(tf.train.SessionRunHook):
+    def __init__(self):
+        self.metrics_vars = tf.get_collection(tf.GraphKeys.LOCAL_VARIABLES, scope="top\d{1,2}")
+        self.metrics_vars_initializer = tf.variables_initializer(var_list=self.metrics_vars)
+
+    def before_run(self, run_context):
+        run_context.session.run(self.metrics_vars_initializer)
 
 
 def train():
@@ -188,6 +197,7 @@ def train():
         # 'loss': 'cross_entropy_loss/cross_entropy_loss'
     }
     train_hooks = [tf.train.LoggingTensorHook(tensors=tensors_to_log, every_n_iter=100)]
+    # eval_hooks.append(EvalStepHook())
     # train_hooks = train_hooks + [tf_debug.LocalCLIDebugHook()]
     early_stop = False
     run_params = {
@@ -200,8 +210,13 @@ def train():
                                          model_dir=MODEL_DIR)
     benchmark_logger = BaseBenchmarkLogger()
     benchmark_logger.log_run_info('wide_deep', "Census Income", run_params, test_id=None)
+    metrics_vars = tf.get_collection(tf.GraphKeys.LOCAL_VARIABLES, scope="top\d{1,2}")
+    metrics_vars_initializer = tf.variables_initializer(var_list=metrics_vars)
     for n in range(train_steps // steps_between_evals):
         estimator_c.train(input_fn=train_input_fn_c, hooks=train_hooks, steps=500)
+        graph = tf.get_default_graph()
+        session = tf.Session(graph=graph)
+        session.run(metrics_vars_initializer)
         results = estimator_c.evaluate(input_fn=eva_input_fn_c, hooks=eval_hooks)
         # Display evaluation metrics
         tf.logging.info('Results at step %d / %d', (n + 1) * steps_between_evals, train_steps)

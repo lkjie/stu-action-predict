@@ -3,23 +3,28 @@
 
 import tensorflow as tf
 import pandas as pd
+import json
 
 FLAGS = tf.flags.FLAGS
 _LABEL_NUM = FLAGS.label_cate_num
 _LABEL_NAME = FLAGS.label_name
 whole_file = FLAGS.whole_file
 TOTAL_NUM = FLAGS.all_data_num
+unique_file = FLAGS.unique_file
 
 _HASH_BUCKET_SIZE = 1000
-# categorical_features = ['student_id', 'card_id', 'timeslot', 'trans_type', 'category', 'device_name']
 categorical_features = ['student_id', 'card_id', 'timeslot', 'trans_type', 'category']
 continus_features = ['amount', 'remained_amount']
-df = pd.read_csv(whole_file)
-df[categorical_features] = df[categorical_features].fillna('')
-df[continus_features] = df[continus_features].fillna(0)
-df['card_id'] = df['card_id'].apply(str)
-_CSV_COLUMNS = df.columns.tolist()
-_ID_SIZE = df.student_id.drop_duplicates().count()
+unique_value = json.load(open(unique_file))
+_CSV_COLUMNS = ['student_id',
+                'card_id',
+                'amount',
+                'remained_amount',
+                'trans_type',
+                'category',
+                'timeslot',
+                'placei']
+_ID_SIZE = len(unique_value['student_id'])
 FIFTEEN_PCT = int(TOTAL_NUM * 0.15)
 _NUM_EXAMPLES = {
     'train': TOTAL_NUM - FIFTEEN_PCT * 2,
@@ -30,19 +35,18 @@ _NUM_EXAMPLES = {
 def build_model_columns():
     """Builds a set of wide and deep feature columns."""
     # Continuous variable columns
-    global df
     cate_columns = []
     cate_embedding_columns = []
     cate_no_embedding_columns = []
     continus_columns = []
     embedding_features = []
     for col in categorical_features:
-        coluniquelen = len(df[col].unique())
+        coluniquelen = len(unique_value[col])
         if coluniquelen > _HASH_BUCKET_SIZE:
             print("col name :{}\t\tcount:{}".format(col, coluniquelen))
             embedding_features.append(col)
     for feat in categorical_features:
-        f = tf.feature_column.categorical_column_with_vocabulary_list(feat, df[feat].unique())
+        f = tf.feature_column.categorical_column_with_vocabulary_list(feat, unique_value[feat])
         if feat in embedding_features:
             f1 = tf.feature_column.embedding_column(f, dimension=100)
             cate_embedding_columns.append(f1)
@@ -54,15 +58,14 @@ def build_model_columns():
         f = tf.feature_column.numeric_column(feat)
         continus_columns.append(f)
     deep_columns = cate_embedding_columns + cate_no_embedding_columns + continus_columns
-    del df
     return deep_columns
 
 
 def input_fn(data_file, num_epochs, shuffle, batch_size, is_classification=False):
     """Generate an input function for the Estimator."""
     assert tf.gfile.Exists(data_file), (
-        '%s not found. Please make sure you have run census_dataset.py and '
-        'set the --data_dir argument to the correct path.' % data_file)
+        '%s not found. Please make sure you have run dataset.py and '
+        'set the --data_file argument to the correct path.' % data_file)
 
     def parse_csv(value):
         tf.logging.info('Parsing {}'.format(data_file))
