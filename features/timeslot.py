@@ -292,4 +292,4 @@ def traindata4():
 
 
 if __name__ == '__main__':
-    traindata4()
+    traindata1()

@@ -20,12 +20,15 @@ SAMPLE_GAP = 0.01  # 采样间隔
 
 def generate_data(seq):
     # 序列的第i项和后面的TIMESTEPS-1项合在一起作为输入，第i+TIMESTEPS项作为输出
-    X = []
-    y = []
-    for i in range(len(seq) - TIMESTEPS - 1):
-        X.append([seq[i:i + TIMESTEPS]])
-        y.append([seq[i + TIMESTEPS]])
-    return np.array(X, dtype=np.float32), np.array(y, dtype=np.float32)
+    # X = []
+    # y = []
+    # for i in range(len(seq) - TIMESTEPS - 1):
+    #     X.append([seq[i:i + TIMESTEPS]])
+    #     y.append([seq[i + TIMESTEPS]])
+    # train_X, train_y = np.array(X, dtype=np.float32), np.array(y, dtype=np.float32)
+    train_X = np.random.rand(BATCH_SIZE,TIMESTEPS,6,8)
+    train_y = np.random.rand(BATCH_SIZE,TIMESTEPS)
+    return train_X, train_y
 
 
 def lstm_model(X, y, mode):

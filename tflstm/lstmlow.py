@@ -10,25 +10,29 @@ import numpy as np
 import tensorflow as tf
 import numbers
 import json
+import time
 from tensorflow.python.ops import array_ops
 from tensorflow.python import debug as tf_debug
-sys.path.append('/home/liwenjie/liwenjie/projects/lwjpaper')
+sys.path.append('..')
 
 '''
 batch_size can ONLY set to 1
 '''
 all_data_num = 41633
 _LABEL_NUM = 104
-CHECKPOINT_PATH = '/home/liwenjie/liwenjie/tftmp/lstmlow0/'
+PROJECT_PATH = '/home/liwenjie/liwenjie/projects/lwjpaper'
+CHECKPOINT_PATH = PROJECT_PATH + '/tftmp/lstmlow0'
+# CHECKPOINT_PATH = '/home/liwenjie/liwenjie/tftmp/lstmlow0'
+
 
 padding_size = 900
 batch_size = 1
-num_epoch = 2
+num_epoch = 30
 train_steps = int(2 * all_data_num * 0.7)
 steps_between_evals = 1000
-hidden_units = [1000, 500, 150, 104]
+hidden_units = [2000, 1000, 500, 200, 104]
 
-unique_file = '/home/liwenjie/liwenjie/projects/lwjpaper/data/unique.json'
+unique_file = PROJECT_PATH+'/data/unique.json'
 categorical_features = ['student_id', 'card_id', 'timeslot', 'trans_type', 'category']
 continus_features = ['amount', 'remained_amount']
 unique_value = json.load(open(unique_file))
@@ -194,7 +198,7 @@ def model_fn(features, labels, feature_length, feature_columns=None):
     tf.summary.scalar('loss', loss)
     for key in eval_metric_ops.keys():
         eval_value, eval_value_op = eval_metric_ops[key]
-        tf.summary.scalar(key, eval_value)
+        tf.summary.scalar(key, eval_value_op)
     return pred_logits, loss, train_op, eval_metric_ops
 
 
@@ -263,33 +267,48 @@ def main():
     merged = tf.summary.merge_all()
     # x = model_fn(features_placeholder_dict, labels_placeholder, feature_length_placeholder)
     saver = tf.train.Saver()
-    step = 0
-
-    with tf.Session() as sess:
-        # validation metric init op
-        validation_metrics_vars = tf.get_collection(tf.GraphKeys.LOCAL_VARIABLES, scope=validation_metrics_var_scope)
-        validation_metrics_init_op = tf.variables_initializer(var_list=validation_metrics_vars, name='validation_metrics_init')
-        tf.initialize_all_tables().run()
-        sess.run(validation_metrics_init_op)
+    gpu_options = tf.GPUOptions(allow_growth=True)
+    # with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, device_count={'GPU': 1})) as sess:
+    with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         train_writer = tf.summary.FileWriter(CHECKPOINT_PATH + '/train', sess.graph)
         test_writer = tf.summary.FileWriter(CHECKPOINT_PATH + '/test')
-        tf.global_variables_initializer().run()
+        if 'model.ckpt' in os.listdir(CHECKPOINT_PATH):
+            saver.restore(sess, CHECKPOINT_PATH + '/model.ckpt')
+            step = tf.train.get_global_step()
+        else:
+            # validation metric init op
+            validation_metrics_vars = tf.get_collection(tf.GraphKeys.LOCAL_VARIABLES, scope=validation_metrics_var_scope)
+            validation_metrics_init_op = tf.variables_initializer(var_list=validation_metrics_vars, name='validation_metrics_init')
+            tf.tables_initializer().run()
+            sess.run(validation_metrics_init_op)
+            step = tf.train.get_global_step()
+            if not step:
+                step = tf.Variable(0, name='global_step', trainable=False)
+            tf.global_variables_initializer().run()
+
+        stepint = sess.run(step)
         # sess = tf_debug.TensorBoardDebugWrapperSession(sess, "172.16.170.116:6066")
+        t = time.time()
+        sumtime0 = t
         for i in range(num_epoch):
             print("in epoch: %d" % (i+1))
             for sid in stuid_train:
                 dic_feat = get_feed(sid, consum, place_holders)
                 summary, cost, _ = sess.run([merged, loss, train_op], feed_dict=dic_feat)
-                train_writer.add_summary(summary, step)
-                if step % 10 == 0:
-                    print("after %d steps, per token cost is %.3f" % (step, cost))
-                if step % 50 == 0:
-                    saver.save(sess, CHECKPOINT_PATH, global_step=step)
+                train_writer.add_summary(summary, stepint)
+                if stepint % 10 == 0:
+                    t1 = time.time()
+                    print("after %d steps, per token cost is %.3f, 10 steps time took %.4f seconds" % (stepint, cost, t1 - t))
+                    t = t1
+                if stepint % 50 == 0:
+                    saver.save(sess, CHECKPOINT_PATH + '/model.ckpt', global_step=stepint)
                     sid_test = stuid_test.sample(n=1).iloc[0]
                     dic_feat_test = get_feed(sid_test, consum, place_holders)
                     summary_test, cost = sess.run([merged, loss], feed_dict=dic_feat_test)
-                    test_writer.add_summary(summary_test, step)
-                step += 1
+                    test_writer.add_summary(summary_test, stepint)
+                stepint += 1
+        sumtime1 = time.time()
+        print("All %d training step(s) taking %.4f seconds" % (stepint, sumtime1 - sumtime0))
 
 
 if __name__ == '__main__':
