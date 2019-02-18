@@ -102,3 +102,24 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+.idea
+cmake-build-debug
+
+*.csv
+*.npy
+*.txt
+model.m
+models
+model
+nlpdata
+*.tar.gz
+tftmp
+tmpjob
+
+!CMakeLists.txt
+*_logs
+tflstm_timestep
+
+autossh.sh
+test*

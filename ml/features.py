@@ -37,6 +37,21 @@ df_basicinfo = pd.read_sql_table('t_basicinfo', conn)
 # 选课信息
 df_course_selection = pd.read_sql_table('t_course_selection', conn)
 
+# 成绩
+
+
 # 图书借阅
 df_libraryborrow = pd.read_sql_table('t_libraryborrow', conn)
+
+# 图书信息
+
+# 就业信息
+
+# 家庭背景
+
+# 奖t_scholarship、助t_subsidy、贷t_loan信息
+
+# 门禁
+
+# 消费
 
