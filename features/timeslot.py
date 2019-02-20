@@ -12,6 +12,7 @@ import datetime
 import json
 # import matplotlib.pyplot as plt
 # import seaborn as sns
+from sqlalchemy import create_engine
 import re
 # plt.style.use('fivethirtyeight')
 import warnings
@@ -290,6 +291,112 @@ def traindata4():
     consum.iloc[-eval_size * 2:-eval_size, :].to_csv('../data/tf_val_groupby.csv', index=False)
     consum.iloc[-eval_size:, :].to_csv('../data/tf_test_groupby.csv', index=False)
 
+
+def traindata5():
+    '''
+    训练数据,ML使用，将时间每半个小时分为一个bin，每天分为48个bin，同时将消费和门禁合并
+    :return: 
+    '''
+    DB_OUT_HOST = '172.16.170.81'
+    DB_OUT_PORT = 3307
+    DB_OUT_USER = 'liwenjie'
+    DB_OUT_PWD = 'liwenjie333'
+    DB_OUT_NAME = 'data_center'
+
+    engine = create_engine(
+        'mysql+pymysql://%(user)s:%(pwd)s@%(host)s:%(port)s/%(dbname)s?charset=utf8' % {'user': DB_OUT_USER,
+                                                                                        'pwd': DB_OUT_PWD,
+                                                                                        'host': DB_OUT_HOST,
+                                                                                        'dbname': DB_OUT_NAME,
+                                                                                        'port': DB_OUT_PORT},
+        encoding='utf-8')
+    conn = engine.connect()
+    # 基本信息
+    df_basicinfo = pd.read_sql_table('t_basicinfo', conn)
+
+    consum = pd.read_csv('../data/consumption.txt')
+    consum.drop(['id'], axis=1, inplace=True)
+    consum.dropna(subset=['place', 'student_id', 'brush_time'], inplace=True)
+    consum.fillna('', inplace=True)
+    consum['brush_time'] = pd.to_datetime(consum.brush_time)
+    consum['timeslot'] = '0'
+    consum = consum[consum['student_id'].isin(df_basicinfo['student_id'])]
+
+    df_access = pd.read_csv('../data/access.txt')
+    df_access = df_access.drop(['campus', 'device_id', 'id'], axis=1)
+    df_access = df_access[df_access['student_id'].isin(df_basicinfo['student_id'])]
+    df_access = df_access.rename({'pass_time':'brush_time','direction':'trans_type'}, axis=1)
+
+    consum = pd.concat([consum, df_access])
+    consum = consum
+
+
+    '''
+    null
+
+    # 沙河校区_ 沙河图书馆 只有1类
+
+    '''
+    pattern = [
+        '电子科技大学_(\w{3})\dF.+',
+        'null_(\w+)',
+        '沙河校区_(\w+)',
+        '电子科技大学_(.+)POS.+',
+        '电子科技大学_(.+)收费.+',
+        '(.+)_.+'  # general
+    ]
+
+    def splitplace(x):
+        res = x
+        for p in pattern:
+            if re.match(p, x):
+                res = re.findall(p, x)[0]
+                return res
+        if x:
+            print(x)
+        return res
+
+    consum['place0'] = consum.place.apply(splitplace)
+    t, indexer = pd.factorize(consum.place0)
+    consum['placei'] = t
+
+    # 添加下次刷卡地点标签
+    def label_next(x):
+        if x.shape[0] == 1:
+            label = [np.nan]
+        else:
+            # error: label last
+            # label = [np.nan] + x['placei'][:-1].tolist()
+            label = x['placei'][1:].tolist() + [np.nan]
+        x['place_next'] = label
+        return x
+
+    consum = consum.groupby(['student_id']).apply(label_next)
+    consum = consum.dropna(subset=['place_next'])
+    consum['place_next'] = consum['place_next'].apply(int)
+
+    consum.index = consum.brush_time
+    '''
+    30分钟一个band
+    '''
+    binband = pd.date_range(start='2019-01-01', end='2019-01-02', freq='30Min')
+    for i in range(binband.shape[0]-1):
+        stime = binband[i].strftime('%H:%M:%S')
+        etime = binband[i+1].strftime('%H:%M:%S')
+        consum.loc[consum.between_time(stime, etime, include_end=False).index, 'timeslot'] = i
+    consum = consum.reset_index(drop=True)
+    consum.drop(['campus', 'device_id', 'device_name'], axis=1, inplace=True)
+
+    # stuidlabels, stuiduniques = pd.factorize(consum['student_id'])
+    # stuidmap = {sid:i for i, sid in enumerate(stuiduniques)}
+    # json.dump(stuidmap, open('../data/stuidmap.json', 'w'))
+    # consum['student_id'] = stuidlabels
+
+    eval_size = int(consum.shape[0] * 0.15)
+    consum.to_csv('../data/consum_access_feat5.csv', index=False)
+    consum.iloc[:-eval_size * 2, :].to_csv('../data/tf_train_feat5.csv', index=False)
+    consum.iloc[-eval_size * 2:-eval_size, :].to_csv('../data/tf_val_feat5.csv', index=False)
+    consum.iloc[-eval_size:, :].to_csv('../data/tf_test_feat5.csv', index=False)
 
 if __name__ == '__main__':
     traindata1()

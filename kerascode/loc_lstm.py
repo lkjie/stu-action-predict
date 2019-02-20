@@ -26,28 +26,28 @@ from tensorflow.python import debug as tf_debug
 from keras.backend.tensorflow_backend import set_session
 
 from kerascode.NNUtils import top1, top3, top5, top10, OneHot
-
+from kerascode.configure import *
 
 batch_size = 128
 
 print('Loading data...')
-consum = pd.read_csv('../data/consum_access_feat54.csv', nrows=200000)
-consum['brush_time'] = pd.to_datetime(consum['brush_time'])
+consum = load_data()
+
 features = ['amount', 'card_id', 'student_id_int', 'remained_amount', 'timeslot']
 features = ['card_id', 'student_id_int', 'timeslot',
-                # 'amount',
-                # 'remained_amount',
-                # 'trans_type',
-                # 'category'
+            # 'amount',
+            # 'remained_amount',
+            # 'trans_type',
+            # 'category'
             ]
 label = 'placei'
 
-consum = consum[features + [label]]
+
 timeslot_cates = consum['timeslot'].drop_duplicates().count()
 student_id_cates = consum['student_id_int'].drop_duplicates().count()
 card_cates = consum['card_id'].drop_duplicates().count()
 label_cates = consum[label].drop_duplicates().count()
-print('label_cates: %d'%label_cates)
+print('label_cates: %d' % label_cates)
 
 # x_train, x_test, y_train, y_test = train_test_split(consum[features], consum[label], test_size=0.2, random_state=42, stratify=consum[label])
 x_train, x_test, y_train, y_test = train_test_split(consum[features], consum[label], test_size=0.2, random_state=42)
@@ -55,18 +55,22 @@ print(len(x_train), 'train sequences')
 print(len(x_test), 'test sequences')
 
 
+del consum
 def build_model():
     print('Build model...')
     id_inp = Input(shape=(1,), dtype='int32')
-    id_emb = Embedding(input_dim=student_id_cates, output_dim=100, input_length=1, mask_zero=False, trainable=True, name='student_id')(id_inp)
+    id_emb = Embedding(input_dim=student_id_cates, output_dim=100, input_length=1, mask_zero=False, trainable=True,
+                       name='student_id')(id_inp)
     time_inp = Input(shape=(1,), dtype='int32')
-    time_emb = Embedding(input_dim=timeslot_cates, output_dim=100, input_length=1, mask_zero=False, trainable=True, name='timeslot')(time_inp)
+    time_emb = Embedding(input_dim=timeslot_cates, output_dim=100, input_length=1, mask_zero=False, trainable=True,
+                         name='timeslot')(time_inp)
     card_inp = Input(shape=(1,), dtype='int32')
-    card_emb = Embedding(input_dim=card_cates, output_dim=100, input_length=1, mask_zero=False, trainable=True, name='card_id')(card_inp)
+    card_emb = Embedding(input_dim=card_cates, output_dim=100, input_length=1, mask_zero=False, trainable=True,
+                         name='card_id')(card_inp)
 
     x = keras.layers.concatenate([id_emb, time_emb, card_emb])
-    lstm1 = LSTM(1000, dropout=0.2, recurrent_dropout=0.2, return_sequences=True)(x)
-    lstm2 = LSTM(200, dropout=0.2, recurrent_dropout=0.2)(lstm1)
+    lstm1 = LSTM(1024, dropout=0.2, recurrent_dropout=0.2, return_sequences=True)(x)
+    lstm2 = LSTM(256, dropout=0.2, recurrent_dropout=0.2)(lstm1)
     out = Dense(label_cates, activation='softmax')(lstm2)
 
     # input1 = Input(shape=(1,), dtype='int32')
@@ -81,13 +85,14 @@ def build_model():
                   metrics=['accuracy', top1, top3, top5, top10])
     return model
 
+
 model = build_model()
 # keras_backend.set_session(tf_debug.TensorBoardDebugWrapperSession(tf.Session(), "localhost:6007"))
-tensorboard = TensorBoard(log_dir='./test1_logs',batch_size=batch_size,
-                          embeddings_freq=5,
-                          embeddings_layer_names=['student_id', 'timeslot', 'card_id'],
+tensorboard = TensorBoard(log_dir='./test1_logs', batch_size=batch_size,
+                          # embeddings_freq=5,
+                          # embeddings_layer_names=['student_id', 'timeslot', 'card_id'],
                           # embeddings_metadata='metadata.tsv',
-                          embeddings_data=[x_test['student_id_int'], x_test['timeslot'], x_test['card_id']]
+                          # embeddings_data=[x_test['student_id_int'], x_test['timeslot'], x_test['card_id']]
                           )
 csv_logger = CSVLogger('logs/test1_training.log')
 # gpu_options = tf.GPUOptions(allow_growth=True)
@@ -110,7 +115,8 @@ model.fit([x_train['student_id_int'], x_train['timeslot'], x_train['card_id']], 
           epochs=10,
           validation_data=([x_test['student_id_int'], x_test['timeslot'], x_test['card_id']], y_test)
           )
-eval_res = model.evaluate([x_test['student_id_int'], x_test['timeslot'], x_test['card_id']], y_test, batch_size=batch_size)
+eval_res = model.evaluate([x_test['student_id_int'], x_test['timeslot'], x_test['card_id']], y_test,
+                          batch_size=batch_size)
 y_p = model.predict([x_test['student_id_int'], x_test['timeslot'], x_test['card_id']])
 print('Test evaluation:')
 print(model.metrics_names)
