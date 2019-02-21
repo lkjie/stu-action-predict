@@ -39,13 +39,11 @@ from sklearn.model_selection import train_test_split #training and testing data 
 from sklearn import metrics #accuracy measure
 from sklearn.metrics import confusion_matrix #for confusion matrix
 
-# 一个学期的数据，从20150901-20160117，学生包括4个年级的所有本科生，已补全方向，地点重新整理保留164个不同地点，添加timeslot_week
-# consum.to_csv('../data/consum_access_feat54.csv', index=False)
-consum = pd.read_csv('../data/consum_access_feat55.csv')
-consum['brush_time'] = pd.to_datetime(consum['brush_time'])
+
+consum = pd.read_csv('../data/consum_access_feat6m.csv')
 
 config = tf.ConfigProto(device_count={"CPU": 1, 'GPU': 0})
-tfsess = tf.InteractiveSession(config=config)
+tfsess = tf.Session(config=config)
 
 def mertics_acck(y_true, y_pred):
     def topk_tf(ytrue, ypred, k=1):
@@ -73,15 +71,12 @@ def mertics_acck(y_true, y_pred):
     print(top1, top3, top5, top10)
 
 
-import numpy as np
 import pandas as pd
 import lightgbm
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelBinarizer
 
 '''GDBT 实验三'''
-consum = pd.read_csv('../data/consum_access_feat54.csv', nrows=200000)
-consum['brush_time'] = pd.to_datetime(consum['brush_time'])
 
 features = ['student_id_int', 'timeslot']
 label = 'placei'
@@ -132,14 +127,14 @@ print(x_test.shape[0], 'test sequences')
 
 
 def exp_logistic():
-    model = LogisticRegression(random_state=0, solver='lbfgs', multi_class='multinomial')
+    model = LogisticRegression(random_state=0, solver='lbfgs', multi_class='multinomial', n_jobs=-1, verbose=1)
     model.fit(x_train,y_train)
     prediction1=model.predict_proba(x_test)
     mertics_acck(y_test, prediction1)
 
 
 def exp_svm():
-    model = svm.SVC(kernel='rbf', C=1, gamma=0.1)
+    model = svm.SVC(kernel='rbf', C=1, gamma=0.1, verbose=1)
     model.fit(x_train,y_train)
     prediction1=model.predict_proba(x_test)
     mertics_acck(y_test, prediction1)
@@ -147,3 +142,5 @@ def exp_svm():
 
 def exp_bayes():
     from sklearn.naive_bayes import GaussianNB  # Naive bayes
+
+exp_logistic()

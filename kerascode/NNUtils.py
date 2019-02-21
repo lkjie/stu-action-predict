@@ -10,6 +10,10 @@ from keras.layers import Lambda
 import tensorflow as tf
 from tensorflow.python.ops import array_ops
 
+'''
+工具文件，不允许引用其他内部包，防止交叉引用
+'''
+
 
 def OneHot(input_dim=None, input_length=None):
     # Check if inputs were supplied correctly

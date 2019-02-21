@@ -8,14 +8,15 @@ import os
 import numpy as np
 
 '''
-配置文件，不允许内部引用其他包，防止交叉引用
+配置文件，不允许引用其他内部包，防止交叉引用
 '''
 
 alldata = True
-nrows = 200000
+nrows = 500000
 batch_size = 32
 maxlen = 10
 stratify = False
+epochs = 8
 
 if not os.path.exists('logs'):
     os.makedirs('logs')

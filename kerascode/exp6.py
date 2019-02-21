@@ -25,7 +25,7 @@ import tensorflow as tf
 from tensorflow.python import debug as tf_debug
 from keras.backend.tensorflow_backend import set_session
 
-from kerascode.NNUtils import top1, top3, top5, top10, OneHot
+from kerascode.NNUtils import *
 from kerascode.configure import *
 
 '''
@@ -71,12 +71,15 @@ def build_model():
         # Slicing the ith channel:
         out = Lambda(lambda x: x[:, i])(fea_inp)
         out = Reshape((1,))(out)
+        if features[i] == 'student_id_int':
+            nextlayer = Embedding(input_dim=emb_cates[i], output_dim=100, input_length=1, mask_zero=False,
+                                  trainable=True,
+                                  name=emb_names[i])(out)
+        else:
+            nextlayer = OneHot(input_dim=emb_cates[i], input_length=1)(out)
 
-        # Setting up your per-channel layers (replace with actual sub-models):
-        emb = Embedding(input_dim=emb_cates[i], output_dim=100, input_length=1, mask_zero=False, trainable=True,
-                        name=emb_names[i])(out)
 
-        branch_outputs.append(emb)
+        branch_outputs.append(nextlayer)
 
     x = keras.layers.concatenate(branch_outputs)
     lstm1 = LSTM(1024, dropout=0.2, recurrent_dropout=0.2, return_sequences=True)(x)
@@ -114,7 +117,7 @@ print('Train...')
 model.fit(x_train, y_train,
           batch_size=batch_size,
           callbacks=[tensorboard, csv_logger],
-          epochs=10,
+          epochs=epochs,
           validation_data=(x_test, y_test))
 eval_res = model.evaluate(x_test, y_test, batch_size=batch_size)
 y_p = model.predict(x_test)

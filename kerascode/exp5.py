@@ -25,7 +25,7 @@ import tensorflow as tf
 from tensorflow.python import debug as tf_debug
 from keras.backend.tensorflow_backend import set_session
 
-from kerascode.NNUtils import top1, top3, top5, top10, OneHot
+from kerascode.NNUtils import *
 from kerascode.configure import *
 
 '''
@@ -117,7 +117,7 @@ print('Train...')
 model.fit(x_train, y_train,
           batch_size=batch_size,
           callbacks=[tensorboard, csv_logger],
-          epochs=10,
+          epochs=epochs,
           validation_data=(x_test, y_test))
 eval_res = model.evaluate(x_test, y_test, batch_size=batch_size)
 y_p = model.predict(x_test)

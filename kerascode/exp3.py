@@ -22,24 +22,24 @@ from keras.layers import LSTM, Input
 from keras.callbacks import TensorBoard, CSVLogger
 import keras
 from keras.layers import Lambda
-# We will use `one_hot` as implemented by one of the backends
-from keras import backend as K
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
 from keras.backend.tensorflow_backend import set_session
 
-from kerascode.NNUtils import top1, top3, top5, top10, OneHot
+from kerascode.NNUtils import *
 from kerascode.configure import *
 
 '''
 预测金额
 '''
 
+print('Loading data...')
+
 experiment = os.path.basename(__file__).replace('.py', '')
 experiment = get_experiment_name(experiment)
-
-print('Loading data...')
 consum = load_data()
+
+# consum.to_csv('../data/consum_access_feat55.csv', index=False)
 
 features = ['amount', 'card_id', 'student_id_int', 'remained_amount', 'timeslot']
 features = ['student_id_int', 'timeslot_week',
@@ -55,12 +55,15 @@ timeslot_cates = consum['timeslot_week'].drop_duplicates().count()
 student_id_cates = consum['student_id_int'].drop_duplicates().count()
 label_cates = consum[label].drop_duplicates().count()
 
+student_id_emb_data = consum[features].drop_duplicates(subset=['student_id_int'])
+student_id_emb_data = [student_id_emb_data['student_id_int'], student_id_emb_data['timeslot_week']]
+
 if stratify:
     x_train, x_test, y_train, y_test = train_test_split(consum[features], consum[label], test_size=0.2, random_state=42,
                                                         stratify=consum[label])
 else:
     x_train, x_test, y_train, y_test = train_test_split(consum[features], consum[label], test_size=0.2, random_state=42)
-print(len(x_train), 'train sequences')
+    print(len(x_train), 'train sequences')
 print(len(x_test), 'test sequences')
 
 x = [x_train['student_id_int'], x_train['timeslot_week']]
@@ -74,10 +77,9 @@ def build_model():
     id_emb = Embedding(input_dim=student_id_cates, output_dim=100, input_length=1, mask_zero=False, trainable=True,
                        name='student_id')(id_inp)
     time_inp = Input(shape=(1,), dtype='int32')
-    time_emb = Embedding(input_dim=timeslot_cates, output_dim=100, input_length=1, mask_zero=False, trainable=True,
-                         name='timeslot_week')(time_inp)
+    time_onehot = OneHot(input_dim=timeslot_cates, input_length=1)(time_inp)
 
-    x = keras.layers.concatenate([id_emb, time_emb])
+    x = keras.layers.concatenate([id_emb, time_onehot])
     lstm1 = LSTM(1024, dropout=0.2, recurrent_dropout=0.2, return_sequences=True)(x)
     lstm2 = LSTM(256, dropout=0.2, recurrent_dropout=0.2)(lstm1)
     out = Dense(label_cates, activation='softmax')(lstm2)
@@ -94,10 +96,10 @@ def build_model():
 model = build_model()
 # keras_backend.set_session(tf_debug.TensorBoardDebugWrapperSession(tf.Session(), "localhost:6007"))
 tensorboard = TensorBoard(log_dir='./%s_logs' % experiment, batch_size=batch_size,
-                          # embeddings_freq=5,
-                          # embeddings_layer_names=['student_id', 'timeslot_week'],
+                          embeddings_freq=1,
+                          embeddings_layer_names=['student_id'],
                           # embeddings_metadata='metadata.tsv',
-                          # embeddings_data=x_t
+                          embeddings_data=student_id_emb_data
                           )
 csv_logger = CSVLogger('logs/%s_training.log' % experiment)
 # gpu_options = tf.GPUOptions(allow_growth=True)
@@ -111,7 +113,7 @@ print('Train...')
 model.fit(x, y_train,
           batch_size=batch_size,
           callbacks=[tensorboard, csv_logger],
-          epochs=10,
+          epochs=epochs,
           validation_data=(x_t, y_test))
 eval_res = model.evaluate(x_t, y_test, batch_size=batch_size)
 y_p = model.predict(x_t)

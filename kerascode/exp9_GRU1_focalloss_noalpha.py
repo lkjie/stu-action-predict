@@ -25,7 +25,7 @@ import tensorflow as tf
 from tensorflow.python import debug as tf_debug
 from keras.backend.tensorflow_backend import set_session
 
-from kerascode.NNUtils import top1, top3, top5, top10, OneHot, focal_loss, focal_loss_noalpha
+from kerascode.NNUtils import *
 from kerascode.configure import *
 
 '''
@@ -92,14 +92,14 @@ def build_model():
     timeseries_inp = Input(shape=(maxlen, timeseries_count), dtype='int32')
     branch_outputs = []
     for i in range(timeseries_count):
-        # Slicing the ith channel:
         out = Lambda(lambda x: x[:, :, i])(timeseries_inp)
-
-        # Setting up your per-channel layers (replace with actual sub-models):
-        emb = Embedding(input_dim=emb_timeseries_cates[i], output_dim=100, input_length=maxlen, mask_zero=False,
-                        trainable=True, name=emb_timeseries_names[i])(out)
-
-        branch_outputs.append(emb)
+        if timeseries[i] == 'student_id_int':
+            nextlayer = Embedding(input_dim=emb_timeseries_cates[i], output_dim=100, input_length=maxlen, mask_zero=False,
+                                  trainable=True,
+                                  name=emb_timeseries_names[i])(out)
+        else:
+            nextlayer = OneHot(input_dim=emb_timeseries_cates[i], input_length=maxlen)(out)
+        branch_outputs.append(nextlayer)
     timeseries_x = keras.layers.concatenate(branch_outputs)
 
     lstm1 = GRU(256, dropout=0.2, recurrent_dropout=0.2)(timeseries_x)
@@ -143,7 +143,7 @@ print('Train...')
 model.fit([x_train1, x_train2], y_train,
           batch_size=batch_size,
           callbacks=[tensorboard, csv_logger],
-          epochs=10,
+          epochs=epochs,
           validation_data=([x_test1, x_test2], y_test)
           )
 eval_res = model.evaluate([x_test1, x_test2], y_test, batch_size=batch_size)
