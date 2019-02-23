@@ -19,7 +19,7 @@ from keras.preprocessing import sequence
 from keras.models import Sequential, Model
 from keras.layers import Dense, Embedding
 from keras.layers import LSTM, Input, Lambda, Reshape
-from keras.callbacks import TensorBoard, CSVLogger
+from keras.callbacks import TensorBoard, CSVLogger, EarlyStopping
 import keras
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
@@ -53,11 +53,8 @@ label_cates = consum[label].drop_duplicates().count()
 emb_cates = [consum[f].drop_duplicates().count() for f in features]
 emb_names = ['embedding_%s' % f for f in features]
 
-if stratify:
-    x_train, x_test, y_train, y_test = train_test_split(consum[features], consum[label], test_size=0.2, random_state=42,
-                                                        stratify=consum[label])
-else:
-    x_train, x_test, y_train, y_test = train_test_split(consum[features], consum[label], test_size=0.2, random_state=42)
+# 金额不需要stratify
+x_train, x_test, y_train, y_test = train_test_split(consum[features], consum[label], test_size=0.2, random_state=42)
 print(len(x_train), 'train sequences')
 print(len(x_test), 'test sequences')
 
@@ -73,7 +70,7 @@ def build_model():
         out = Reshape((1,))(out)
 
         if features[i] == 'student_id_int':
-            nextlayer = Embedding(input_dim=emb_cates[i], output_dim=100, input_length=1, mask_zero=False,
+            nextlayer = Embedding(input_dim=emb_cates[i], output_dim=12, input_length=1, mask_zero=False,
                                   trainable=True,
                                   name=emb_names[i])(out)
         else:
@@ -104,7 +101,8 @@ tensorboard = TensorBoard(log_dir='./%s_logs' % experiment, batch_size=batch_siz
                           # embeddings_metadata='metadata.tsv',
                           # embeddings_data=x_test
                           )
-csv_logger = CSVLogger('logs/%s_training.log' % experiment)
+csv_logger = CSVLogger('logs/%s_training.csv' % experiment)
+early_stopping = EarlyStopping(monitor='val_loss', patience=4)
 # gpu_options = tf.GPUOptions(allow_growth=True)
 # config = tf.ConfigProto(gpu_options=gpu_options)
 config = tf.ConfigProto()
@@ -116,7 +114,7 @@ print('Train...')
 
 model.fit(x_train, y_train,
           batch_size=batch_size,
-          callbacks=[tensorboard, csv_logger],
+          callbacks=[tensorboard, csv_logger, early_stopping],
           epochs=epochs,
           validation_data=(x_test, y_test))
 eval_res = model.evaluate(x_test, y_test, batch_size=batch_size)

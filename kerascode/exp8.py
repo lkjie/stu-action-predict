@@ -19,7 +19,7 @@ from keras.preprocessing import sequence
 from keras.models import Sequential, Model
 from keras.layers import Dense, Embedding, Reshape
 from keras.layers import LSTM, Input, Lambda
-from keras.callbacks import TensorBoard, CSVLogger
+from keras.callbacks import TensorBoard, CSVLogger, EarlyStopping
 import keras
 import tensorflow as tf
 from tensorflow.python import debug as tf_debug
@@ -61,6 +61,10 @@ emb_timeseries_names = ['emb_timeseries_%s' % f for f in timeseries]
 # xlist, ylist = gen_data_exp8(timeseries, label, 8)
 xlist, ylist = load_data_exp8(timeseries, label, 8)
 if stratify:
+    unique, counts = np.unique(ylist, return_counts=True)
+    idy = np.isin(ylist, unique[counts > 1]).reshape(-1)
+    ylist = ylist[idy]
+    xlist = xlist[idy]
     x_train, x_test, y_train, y_test = train_test_split(xlist, ylist, test_size=0.2, random_state=42, stratify=ylist)
 else:
     x_train, x_test, y_train, y_test = train_test_split(xlist, ylist, test_size=0.2, random_state=42)
@@ -78,7 +82,7 @@ def build_model():
         out = Lambda(lambda x: x[:, :, i])(timeseries_inp)
 
         if timeseries[i] == 'student_id_int':
-            nextlayer = Embedding(input_dim=emb_timeseries_cates[i], output_dim=100, input_length=maxlen, mask_zero=False,
+            nextlayer = Embedding(input_dim=emb_timeseries_cates[i], output_dim=12, input_length=maxlen, mask_zero=False,
                                   trainable=True,
                                   name=emb_timeseries_names[i])(out)
         else:
@@ -96,7 +100,7 @@ def build_model():
     # try using different optimizers and different optimizer configs
     model.compile(loss='sparse_categorical_crossentropy',
                   optimizer='adam',
-                  metrics=['accuracy', top1, top3, top5, top10])
+                  metrics=[top1, top3, top5, top10])
     return model
 
 
@@ -108,7 +112,8 @@ tensorboard = TensorBoard(log_dir='./%s_logs' % experiment, batch_size=batch_siz
                           # embeddings_metadata='metadata.tsv',
                           # embeddings_data=x_test
                           )
-csv_logger = CSVLogger('logs/%s_training.log' % experiment)
+csv_logger = CSVLogger('logs/%s_training.csv' % experiment)
+early_stopping = EarlyStopping(monitor='val_loss', patience=4)
 config = tf.ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = 0.2
 set_session(tf.Session(config=config))
@@ -117,7 +122,7 @@ print('Train...')
 
 model.fit(x_train, y_train,
           batch_size=batch_size,
-          callbacks=[tensorboard, csv_logger],
+          callbacks=[tensorboard, csv_logger, early_stopping],
           epochs=epochs,
           validation_data=(x_test, y_test)
           )

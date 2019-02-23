@@ -18,7 +18,7 @@ from sklearn.model_selection import train_test_split
 from keras.preprocessing import sequence
 from keras.models import Sequential, Model
 from keras.layers import Dense, Embedding, Reshape
-from keras.layers import LSTM, Input, Lambda
+from keras.layers import GRU, Input, Lambda
 from keras.callbacks import TensorBoard, CSVLogger, EarlyStopping
 import keras
 import tensorflow as tf
@@ -29,7 +29,7 @@ from kerascode.NNUtils import *
 from kerascode.configure import *
 
 '''
-预测金额，通过学号的序列预测序列
+同时预测地点与金额
 '''
 
 experiment = os.path.basename(__file__).replace('.py', '')
@@ -39,41 +39,69 @@ print('Loading data...')
 consum = load_data()
 
 # features = ['amount', 'card_id', 'student_id_int', 'remained_amount', 'timeslot']
-features = ['timeslot_week',
+features = ['timeslot_week'
             # 'amount',
             # 'remained_amount',
             # 'trans_type',
             # 'category'
             ]
-timeseries = ['student_id_int', 'timeslot_week', 'placei']
+timeseries = ['student_id_int', 'timeslot_week', 'placei', 'amount']
 
 feature_count = len(features)
 timeseries_count = len(timeseries)
-label = 'placei'
-label_cates = consum[label].drop_duplicates().count()
+labels = ['placei', 'amount']
+label_cates = [consum[f].drop_duplicates().count() for f in labels]
 emb_feat_cates = [consum[f].drop_duplicates().count() for f in features]
 emb_feat_names = ['emb_feat_%s' % f for f in features]
 emb_timeseries_cates = [consum[f].drop_duplicates().count() for f in timeseries]
 emb_timeseries_names = ['emb_timeseries_%s' % f for f in timeseries]
 
-xlist, currlist, ylist = load_data_exp7910(features, timeseries, label, 9)
+xlist, currlist, ylist = load_data_exp11(features, timeseries, labels, 11)
+placelist = ylist[:, 0]
+amountlist = ylist[:, 1]
 if stratify:
-    unique, counts = np.unique(ylist, return_counts=True)
-    idy = np.isin(ylist, unique[counts > 1]).reshape(-1)
+    unique, counts = np.unique(placelist, return_counts=True)
+    idy = np.isin(placelist, unique[counts > 1]).reshape(-1)
     ylist = ylist[idy]
     xlist = xlist[idy]
+    placelist = placelist[idy]
+    amountlist = amountlist[idy]
     currlist = currlist[idy]
-    x_train1, x_test1, x_train2, x_test2, y_train, y_test = train_test_split(xlist, currlist, ylist, test_size=0.2,
-                                                                             random_state=42, stratify=ylist)
+    x_train1, x_test1, x_train2, x_test2, y_train1, y_test1, y_train2, y_test2 = train_test_split(xlist, currlist,
+                                                                                                  placelist, amountlist,
+                                                                                                  test_size=0.2,
+                                                                                                  random_state=42,
+                                                                                                  stratify=placelist)
 else:
-    x_train1, x_test1, x_train2, x_test2, y_train, y_test = train_test_split(xlist, currlist, ylist, test_size=0.2,
-                                                                             random_state=42)
+    x_train1, x_test1, x_train2, x_test2, y_train1, y_test1, y_train2, y_test2 = train_test_split(xlist, currlist,
+                                                                                                  placelist, amountlist,
+                                                                                                  test_size=0.2,
+                                                                                                  random_state=42)
 
 print(len(x_train1), 'train sequences')
 print(len(x_test1), 'test sequences')
 
 
+def sparse_focal_loss(y_true, y_pred):
+    '''
+    多标签分类的focal_loss，输入target_tensor为一个正整数，表示类别
+    :param prediction_tensor:
+    :param target_tensor:
+    :param weights:
+    :param alpha:
+    :param gamma:
+    :return:
+    '''
+    y_true = tf.reshape(y_true, [-1])
+    y_true = tf.cast(y_true, dtype='int64')
+    y_true = tf.one_hot(y_true, label_cates[0])
+    res = focal_loss_noalpha(y_pred, y_true)
+    return res
+
+
 del consum
+
+
 def build_model():
     print('Build model...')
     timeseries_inp = Input(shape=(maxlen, timeseries_count), dtype='int32')
@@ -81,7 +109,8 @@ def build_model():
     for i in range(timeseries_count):
         out = Lambda(lambda x: x[:, :, i])(timeseries_inp)
         if timeseries[i] == 'student_id_int':
-            nextlayer = Embedding(input_dim=emb_timeseries_cates[i], output_dim=12, input_length=maxlen, mask_zero=False,
+            nextlayer = Embedding(input_dim=emb_timeseries_cates[i], output_dim=12, input_length=maxlen,
+                                  mask_zero=False,
                                   trainable=True,
                                   name=emb_timeseries_names[i])(out)
         else:
@@ -89,9 +118,7 @@ def build_model():
         branch_outputs.append(nextlayer)
     timeseries_x = keras.layers.concatenate(branch_outputs)
 
-    lstm1 = LSTM(1024, dropout=0.2, recurrent_dropout=0.2, return_sequences=True)(timeseries_x)
-    lstm2 = LSTM(512, dropout=0.2, recurrent_dropout=0.2, return_sequences=True)(lstm1)
-    lstm3 = LSTM(256, dropout=0.2, recurrent_dropout=0.2)(lstm2)
+    lstm1 = GRU(256, dropout=0.2, recurrent_dropout=0.2)(timeseries_x)
 
     branch_outputs = []
     fea_inp = Input(shape=(feature_count,), dtype='int32')
@@ -105,16 +132,19 @@ def build_model():
             nextlayer = OneHot(input_dim=emb_feat_cates[i], input_length=1)(out)
 
         branch_outputs.append(nextlayer)
-    branch_outputs.append(lstm3)
-    merge1 = keras.layers.concatenate(branch_outputs)
-    out = Dense(label_cates, activation='softmax')(merge1)
 
-    model = Model(inputs=[timeseries_inp, fea_inp], outputs=[out])
+    branch_outputs.append(lstm1)
+    merge1 = keras.layers.concatenate(branch_outputs)
+    out_place = Dense(label_cates[0], activation='softmax', name='out_place')(merge1)
+    out_amount = Dense(label_cates[0], activation='sigmoid')(merge1)
+    out_amount = Dense(1, activation='relu', name='out_amount')(out_amount)
+
+    model = Model(inputs=[timeseries_inp, fea_inp], outputs=[out_place, out_amount])
 
     # try using different optimizers and different optimizer configs
-    model.compile(loss='sparse_categorical_crossentropy',
+    model.compile(loss=[sparse_focal_loss, 'mse'],
                   optimizer='adam',
-                  metrics=[top1, top3, top5, top10])
+                  metrics={'out_place': [top1, top3, top5, top10], 'out_amount': ['mse', 'mae']})
     return model
 
 
@@ -134,16 +164,16 @@ set_session(tf.Session(config=config))
 model.summary()
 print('Train...')
 
-model.fit([x_train1, x_train2], y_train,
+model.fit([x_train1, x_train2], [y_train1, y_train2],
           batch_size=batch_size,
           callbacks=[tensorboard, csv_logger, early_stopping],
           epochs=epochs,
-          validation_data=([x_test1, x_test2], y_test)
+          validation_data=([x_test1, x_test2], [y_test1, y_test2])
           )
-eval_res = model.evaluate([x_test1, x_test2], y_test, batch_size=batch_size)
-y_p = model.predict([x_test1, x_test2])
+eval_res = model.evaluate([x_test1, x_test2], [y_test1, y_test2], batch_size=batch_size)
+# y_p = model.predict([x_test1, x_test2])
 print('Test evaluation:')
 print(model.metrics_names)
 print(eval_res)
-print(y_p)
+# print(y_p)
 model.save('models/%s_model' % experiment)

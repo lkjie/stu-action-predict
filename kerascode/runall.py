@@ -10,16 +10,38 @@ import time
 root_dir = '/home/liwenjie/liwenjie/projects/lwjpaper/kerascode'
 files = os.listdir(root_dir)
 
-exclude_files = ['runall.py', 'test.py', 'NNUtils.py', 'imdb_lstm.py', 'configure.py'
-                 # 'exp9_GRU1_focalloss_noalpha.py', 'exp9_GRU1_focalloss_noalphav2.py', 'exp9_GRU1_focalloss_onlypos.py'
-                 # 'exp9_GRU1_focalloss_sgd.py', 'exp9_GRU1_focalloss_withsigmoid.py'
-                 ]
+exclude_files = ['runall.py', 'test.py', 'NNUtils.py', 'imdb_lstm.py', 'configure.py']
+run_files = [
+'exp3_GRU1.py',
+'exp3_GRU.py',
+'exp3.py',
+'exp5.py',
+'exp6.py',
+'exp7.py',
+'exp8.py',
+'exp9_GRU1_128_focalloss.py',
+'exp9_GRU1_512_focalloss.py',
+'exp9_GRU1_emb12.py',
+'exp9_GRU1_emb32.py',
+'exp9_GRU1_emb64.py',
+'exp9_GRU1_focalloss_noalpha.py',
+'exp9_GRU1_focalloss_onlypos.py',
+'exp9_GRU1_focalloss.py',
+'exp9_GRU1_focalloss_sgd.py',
+'exp9_GRU1.py',
+'exp9_GRU2.py',
+'exp9_lstm1.py',
+'exp9_lstm3.py',
+'exp9.py',
+    'exp10_GRU1.py',
+    'exp11_GRU1.py',
+    'exp11_GRU1_relu.py',
 
-# exclude_files = ['test.py', 'imdb_lstm.py']
+]
 
 files = list(filter(lambda f: os.path.isfile(f) and f not in exclude_files and f.endswith('.py'), files))
 
-bsize = 1
+bsize = 3
 
 
 # for i in range(0, len(files), bsize):
@@ -40,8 +62,12 @@ bsize = 1
 #     print('this tasks is done, in %d seconds : ' % int(time_end - time_start), batch)
 
 # 优化版本
+if not os.path.exists('bashlogs'):
+    os.mkdir('bashlogs')
 processes = {}
 for f in files:
+    if f not in run_files:
+        continue
     cmd = 'python %s' % f
     workname = f.rstrip('.py')
     out = open('%s/bashlogs/%s.log' % (root_dir, workname), 'w')
@@ -51,7 +77,7 @@ for f in files:
     processes[workname] = (time_start, p)
     while len(processes) >= bsize:
         end_work = []
-        for workname, pv in processes:
+        for workname, pv in processes.items():
             time_start, p = pv
             if p.poll() is not None:
                 time_end = time.time()

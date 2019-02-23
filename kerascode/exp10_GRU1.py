@@ -18,7 +18,7 @@ from sklearn.model_selection import train_test_split
 from keras.preprocessing import sequence
 from keras.models import Sequential, Model
 from keras.layers import Dense, Embedding, Reshape
-from keras.layers import LSTM, Input, Lambda
+from keras.layers import GRU, Input, Lambda
 from keras.callbacks import TensorBoard, CSVLogger, EarlyStopping
 import keras
 import tensorflow as tf
@@ -29,7 +29,7 @@ from kerascode.NNUtils import *
 from kerascode.configure import *
 
 '''
-预测金额，通过学号的序列预测序列
+预测金额，通过学号的序列预测
 '''
 
 experiment = os.path.basename(__file__).replace('.py', '')
@@ -45,11 +45,11 @@ features = ['timeslot_week',
             # 'trans_type',
             # 'category'
             ]
-timeseries = ['student_id_int', 'timeslot_week', 'placei']
+timeseries = ['student_id_int', 'timeslot_week', 'placei', 'amount']
 
 feature_count = len(features)
 timeseries_count = len(timeseries)
-label = 'placei'
+label = 'amount'
 label_cates = consum[label].drop_duplicates().count()
 emb_feat_cates = [consum[f].drop_duplicates().count() for f in features]
 emb_feat_names = ['emb_feat_%s' % f for f in features]
@@ -89,9 +89,7 @@ def build_model():
         branch_outputs.append(nextlayer)
     timeseries_x = keras.layers.concatenate(branch_outputs)
 
-    lstm1 = LSTM(1024, dropout=0.2, recurrent_dropout=0.2, return_sequences=True)(timeseries_x)
-    lstm2 = LSTM(512, dropout=0.2, recurrent_dropout=0.2, return_sequences=True)(lstm1)
-    lstm3 = LSTM(256, dropout=0.2, recurrent_dropout=0.2)(lstm2)
+    lstm1 = GRU(256, dropout=0.2, recurrent_dropout=0.2)(timeseries_x)
 
     branch_outputs = []
     fea_inp = Input(shape=(feature_count,), dtype='int32')
@@ -105,7 +103,8 @@ def build_model():
             nextlayer = OneHot(input_dim=emb_feat_cates[i], input_length=1)(out)
 
         branch_outputs.append(nextlayer)
-    branch_outputs.append(lstm3)
+
+    branch_outputs.append(lstm1)
     merge1 = keras.layers.concatenate(branch_outputs)
     out = Dense(label_cates, activation='softmax')(merge1)
 

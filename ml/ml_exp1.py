@@ -23,7 +23,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelBinarizer
 sns.set(font='SimHei')
 import logging
-logging.basicConfig(level=logging.INFO,
+logging.basicConfig(level=logging.DEBUG,
                         format='%(asctime)s - %(name)s - %(threadName)s -  %(levelname)s - %(message)s')
 logging.info('start...')
 
@@ -76,15 +76,16 @@ import lightgbm
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelBinarizer
 
+
 '''GDBT 实验三'''
 
-features = ['student_id_int', 'timeslot']
+features = ['student_id_int', 'timeslot_week']
 label = 'placei'
 label_cates = consum[label].drop_duplicates().count()
 print('label_cates: %d'%label_cates)
 
-x_train, x_test, y_train, y_test = train_test_split(consum[features], consum[label], test_size=0.2, random_state=42)
-categorical_features = ['student_id_int', 'timeslot']
+x_train, x_test, y_train, y_test = train_test_split(consum[features], consum[label], test_size=0.2, random_state=42, stratify=consum[label])
+categorical_features = ['student_id_int', 'timeslot_week']
 
 
 def exp_gbdt():
@@ -108,7 +109,7 @@ def exp_gbdt():
     model = lightgbm.train(parameters,
                            train_data,
                            valid_sets=test_data,
-                           num_boost_round=500,
+                           num_boost_round=2000,
                            early_stopping_rounds=100)
 
     yp_prob = model.predict(x_test)
@@ -116,31 +117,84 @@ def exp_gbdt():
     mertics_acck(y_test, yp_prob)
 
 
+print('task: lightGBM')
+exp_gbdt()
+
+
 from sklearn.preprocessing import OneHotEncoder
+import time
+from sklearn.ensemble import BaggingClassifier, RandomForestClassifier
+from sklearn import datasets
+from sklearn.multiclass import OneVsRestClassifier
+from sklearn.svm import SVC
 enc = OneHotEncoder(handle_unknown='ignore')
 x = enc.fit_transform(consum[features])
+
+# Hash
+from sklearn.feature_extraction import FeatureHasher
+
+
+
 y = consum[label]
-# x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42, stratify=y)
-x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
+x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42, stratify=y)
 print(x_train.shape[0], 'train sequences')
 print(x_test.shape[0], 'test sequences')
-
+print(x_train.shape[1], ' features')
 
 def exp_logistic():
-    model = LogisticRegression(random_state=0, solver='lbfgs', multi_class='multinomial', n_jobs=-1, verbose=1)
+    model = LogisticRegression(random_state=0, solver='sag', multi_class='multinomial', n_jobs=-1, verbose=1)
     model.fit(x_train,y_train)
     prediction1=model.predict_proba(x_test)
     mertics_acck(y_test, prediction1)
 
 
 def exp_svm():
-    model = svm.SVC(kernel='rbf', C=1, gamma=0.1, verbose=1)
+    model = svm.SVC(kernel='rbf', C=1, gamma=0.1, verbose=1, shrinking=False)
     model.fit(x_train,y_train)
     prediction1=model.predict_proba(x_test)
     mertics_acck(y_test, prediction1)
 
 
+def baggin_svm():
+    n_estimators = 100
+    start = time.time()
+    clf = OneVsRestClassifier(
+        BaggingClassifier(SVC(kernel='rbf', probability=True, class_weight='balanced'), max_samples=1.0 / n_estimators,
+                          n_estimators=n_estimators))
+    clf.fit(x_train, y_train)
+    end = time.time()
+    print("Bagging SVC", end - start, clf.score(x_train, y_train))
+    prediction1 = clf.predict_proba(x_test)
+    mertics_acck(y_test, prediction1)
+
 def exp_bayes():
     from sklearn.naive_bayes import GaussianNB  # Naive bayes
+    model=GaussianNB()
+    model.fit(x_train.toarray(),y_train)
+    prediction6=model.predict(x_test.toarray())
+    mertics_acck(y_test, prediction6)
 
-exp_logistic()
+'''
+LR 实验一 用6m, ['student_id_int', 'timeslot']时 0.4223056919283194 0.7125646434444081 0.822104074027294 0.9270232911171261
+'''
+
+
+'''
+实验一 data：6m ['student_id_int', 'timeslot_week']
+GBDT 0.3468524352916318 0.5724590891545387 0.6826111642961611 0.8185840237880793
+LR 0.4261302937978887 0.7164388234863607 0.8252912422519351 0.9280856805253398
+'''
+
+
+# print('task: lr')
+# exp_logistic()
+
+# print('task: svm')
+# exp_svm() # too slow
+
+# print('task: baggin_svm')
+# baggin_svm()
+
+print('task: naive_bayes')
+exp_bayes()
+

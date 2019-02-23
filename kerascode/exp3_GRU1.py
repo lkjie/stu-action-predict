@@ -19,7 +19,7 @@ from keras.preprocessing import sequence
 from keras.models import Sequential, Model
 from keras.layers import Dense, Embedding
 from keras.layers import LSTM, Input, GRU
-from keras.callbacks import TensorBoard, CSVLogger
+from keras.callbacks import TensorBoard, CSVLogger, EarlyStopping
 import keras
 from keras.layers import Lambda
 # We will use `one_hot` as implemented by one of the backends
@@ -74,7 +74,7 @@ del consum
 def build_model():
     print('Build model...')
     id_inp = Input(shape=(1,), dtype='int32')
-    id_emb = Embedding(input_dim=student_id_cates, output_dim=100, input_length=1, mask_zero=False, trainable=True,
+    id_emb = Embedding(input_dim=student_id_cates, output_dim=12, input_length=1, mask_zero=False, trainable=True,
                        name='student_id')(id_inp)
     time_inp = Input(shape=(1,), dtype='int32')
     time_onehot = OneHot(input_dim=timeslot_cates, input_length=1)(time_inp)
@@ -88,7 +88,7 @@ def build_model():
     # try using different optimizers and different optimizer configs
     model.compile(loss='sparse_categorical_crossentropy',
                   optimizer='adam',
-                  metrics=['accuracy', top1, top3, top5, top10])
+                  metrics=[top1, top3, top5, top10])
     return model
 
 
@@ -100,7 +100,8 @@ tensorboard = TensorBoard(log_dir='./%s_logs' % experiment, batch_size=batch_siz
                           # embeddings_metadata='metadata.tsv',
                           embeddings_data=student_id_emb_data
                           )
-csv_logger = CSVLogger('logs/%s_training.log' % experiment)
+csv_logger = CSVLogger('logs/%s_training.csv' % experiment)
+early_stopping = EarlyStopping(monitor='val_loss', patience=4)
 # gpu_options = tf.GPUOptions(allow_growth=True)
 # config = tf.ConfigProto(gpu_options=gpu_options)
 config = tf.ConfigProto()
@@ -111,7 +112,7 @@ print('Train...')
 
 model.fit(x, y_train,
           batch_size=batch_size,
-          callbacks=[tensorboard, csv_logger],
+          callbacks=[tensorboard, csv_logger, early_stopping],
           epochs=epochs,
           validation_data=(x_t, y_test))
 eval_res = model.evaluate(x_t, y_test, batch_size=batch_size)
