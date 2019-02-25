@@ -14,7 +14,7 @@ import numpy as np
 alldata = True
 nrows = 500000
 batch_size = 32
-maxlen = 5
+maxlen = 15
 stratify = True
 epochs = 40
 

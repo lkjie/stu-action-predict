@@ -31,7 +31,7 @@ run_files = [
 'exp9_GRU1.py',
 'exp9_GRU2.py',
 'exp9_lstm1.py',
-'exp9_lstm3.py',
+'exp9_lstm3 .py',
 'exp9.py',
     'exp10_GRU1.py',
     'exp11_GRU1.py',
@@ -41,7 +41,7 @@ run_files = [
 
 files = list(filter(lambda f: os.path.isfile(f) and f not in exclude_files and f.endswith('.py'), files))
 
-bsize = 3
+bsize = 2
 
 
 # for i in range(0, len(files), bsize):
