@@ -27,6 +27,7 @@ from keras.backend.tensorflow_backend import set_session
 
 from kerascode.NNUtils import *
 from kerascode.configure import *
+from kerascode.NNoperator import run_model
 
 '''
 预测金额，通过学号的序列预测序列
@@ -36,7 +37,6 @@ experiment = os.path.basename(__file__).replace('.py', '')
 experiment = get_experiment_name(experiment)
 
 print('Loading data...')
-consum = load_data()
 
 # features = ['amount', 'card_id', 'student_id_int', 'remained_amount', 'timeslot']
 features = ['timeslot_week',
@@ -46,17 +46,17 @@ features = ['timeslot_week',
             # 'category'
             ]
 timeseries = ['student_id_int', 'timeslot_week', 'placei']
+labels = ['placei']
 
 feature_count = len(features)
 timeseries_count = len(timeseries)
-label = 'placei'
-label_cates = consum[label].drop_duplicates().count()
+labels_cates = [consum[f].drop_duplicates().count() for f in labels]
 emb_feat_cates = [consum[f].drop_duplicates().count() for f in features]
 emb_feat_names = ['emb_feat_%s' % f for f in features]
 emb_timeseries_cates = [consum[f].drop_duplicates().count() for f in timeseries]
 emb_timeseries_names = ['emb_timeseries_%s' % f for f in timeseries]
 
-xlist, currlist, ylist = load_data_exp7910(features, timeseries, label, 9)
+xlist, currlist, ylist = load_data_expftl(features, timeseries, labels, 9)
 if stratify:
     unique, counts = np.unique(ylist, return_counts=True)
     idy = np.isin(ylist, unique[counts > 1]).reshape(-1)
@@ -85,24 +85,24 @@ def sparse_focal_loss(y_true, y_pred):
     '''
     y_true = tf.reshape(y_true, [-1])
     y_true = tf.cast(y_true, dtype='int64')
-    y_true = tf.one_hot(y_true, label_cates)
+    y_true = tf.one_hot(y_true, labels_cates[0])
     res = focal_loss(y_pred, y_true)
     return res
 
 
-del consum
 def build_model():
     print('Build model...')
-    timeseries_inp = Input(shape=(maxlen, timeseries_count), dtype='int32')
+    timeseries_inp = Input(shape=(timestep_len, timeseries_count), dtype='int32')
     branch_outputs = []
     for i in range(timeseries_count):
         out = Lambda(lambda x: x[:, :, i])(timeseries_inp)
         if timeseries[i] == 'student_id_int':
-            nextlayer = Embedding(input_dim=emb_timeseries_cates[i], output_dim=12, input_length=maxlen, mask_zero=False,
+            nextlayer = Embedding(input_dim=emb_timeseries_cates[i], output_dim=12, input_length=timestep_len,
+                                  mask_zero=False,
                                   trainable=True,
                                   name=emb_timeseries_names[i])(out)
         else:
-            nextlayer = OneHot(input_dim=emb_timeseries_cates[i], input_length=maxlen)(out)
+            nextlayer = OneHot(input_dim=emb_timeseries_cates[i], input_length=timestep_len)(out)
         branch_outputs.append(nextlayer)
     timeseries_x = keras.layers.concatenate(branch_outputs)
 
@@ -122,7 +122,7 @@ def build_model():
         branch_outputs.append(nextlayer)
     branch_outputs.append(lstm1)
     merge1 = keras.layers.concatenate(branch_outputs)
-    out = Dense(label_cates, activation='softmax')(merge1)
+    out = Dense(labels_cates[0], activation='softmax')(merge1)
 
     model = Model(inputs=[timeseries_inp, fea_inp], outputs=[out])
 

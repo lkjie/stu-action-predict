@@ -33,17 +33,17 @@ consum = pd.read_csv('../data/consum_access_feat54.csv', nrows=200000)
 consum['brush_time'] = pd.to_datetime(consum['brush_time'])
 
 features = ['student_id_int', 'timeslot']
-label = 'placei'
-label_cates = consum[label].drop_duplicates().count()
-print('label_cates: %d'%label_cates)
+labels = ['placei']
+labels_cates = [consum[f].drop_duplicates().count() for f in labels]
+print('label_cates: %d'%labels_cates[0])
 
-x, x_test, y, y_test = train_test_split(consum[features], consum[label], test_size=0.2, random_state=42)
+x, x_test, y, y_test = train_test_split(consum[features], consum[labels], test_size=0.2, random_state=42)
 categorical_features = ['student_id_int', 'timeslot']
 train_data = lightgbm.Dataset(x, label=y, categorical_feature=categorical_features)
 test_data = lightgbm.Dataset(x_test, label=y_test)
 parameters = {
     'objective': 'multiclass',
-    "num_class": label_cates,
+    "num_class": labels_cates[0],
     'metric': 'multi_logloss',
     'is_unbalance': 'true',
     'boosting': 'gbdt',

@@ -26,9 +26,9 @@ from tensorflow.python import debug as tf_debug
 from keras.backend.tensorflow_backend import set_session
 from keras import regularizers
 
-
 from kerascode.NNUtils import *
 from kerascode.configure import *
+from kerascode.NNoperator import run_model
 
 '''
 预测金额，通过学号的序列预测序列
@@ -38,7 +38,7 @@ experiment = os.path.basename(__file__).replace('.py', '')
 experiment = get_experiment_name(experiment)
 
 print('Loading data...')
-consum = load_data()
+
 features = ['timeslot_week',
             # 'amount',
             # 'remained_amount',
@@ -46,18 +46,16 @@ features = ['timeslot_week',
             # 'category'
             ]
 timeseries = ['student_id_int', 'timeslot_week', 'placei']
-label = 'placei'
+labels = ['placei']
 feature_count = len(features)
 timeseries_count = len(timeseries)
-label_cates = consum[label].drop_duplicates().count()
+labels_cates = [consum[f].drop_duplicates().count() for f in labels]
 emb_feat_cates = [consum[f].drop_duplicates().count() for f in features]
 emb_feat_names = ['emb_feat_%s' % f for f in features]
 emb_timeseries_cates = [consum[f].drop_duplicates().count() for f in timeseries]
 emb_timeseries_names = ['emb_timeseries_%s' % f for f in timeseries]
 
-# xlist, currlist, ylist = gen_data_exp7910(features, timeseries, label, 9)
-# sys.exit(0)
-xlist, currlist, ylist = load_data_exp7910(features, timeseries, label, 9)
+xlist, currlist, ylist = load_data_expftl(features, timeseries, labels, 9)
 if stratify:
     unique, counts = np.unique(ylist, return_counts=True)
     idy = np.isin(ylist, unique[counts > 1]).reshape(-1)
@@ -73,20 +71,20 @@ print(len(x_train1), 'train sequences')
 print(len(x_test1), 'test sequences')
 
 
-del consum
 def build_model():
     print('Build model...')
-    timeseries_inp = Input(shape=(maxlen, timeseries_count), dtype='int32')
+    timeseries_inp = Input(shape=(timestep_len, timeseries_count), dtype='int32')
     branch_outputs = []
     for i in range(timeseries_count):
         # Slicing the ith channel:
         out = Lambda(lambda x: x[:, :, i])(timeseries_inp)
         if timeseries[i] == 'student_id_int':
-            nextlayer = Embedding(input_dim=emb_timeseries_cates[i], output_dim=12, input_length=maxlen, mask_zero=False,
+            nextlayer = Embedding(input_dim=emb_timeseries_cates[i], output_dim=12, input_length=timestep_len,
+                                  mask_zero=False,
                                   trainable=True,
                                   name=emb_timeseries_names[i])(out)
         else:
-            nextlayer = OneHot(input_dim=emb_timeseries_cates[i], input_length=maxlen)(out)
+            nextlayer = OneHot(input_dim=emb_timeseries_cates[i], input_length=timestep_len)(out)
         branch_outputs.append(nextlayer)
     timeseries_x = keras.layers.concatenate(branch_outputs)
 
@@ -108,8 +106,8 @@ def build_model():
 
     branch_outputs.append(lstm2)
     merge1 = keras.layers.concatenate(branch_outputs)
-    # out = Dense(label_cates, activation='softmax', kernel_regularizer=regularizers.l2(0.01), activity_regularizer=regularizers.l1(0.01))(merge1)
-    out = Dense(label_cates, activation='softmax')(merge1)
+    # out = Dense(labels_cates[0], activation='softmax', kernel_regularizer=regularizers.l2(0.01), activity_regularizer=regularizers.l1(0.01))(merge1)
+    out = Dense(labels_cates[0], activation='softmax')(merge1)
     model = Model(inputs=[timeseries_inp, fea_inp], outputs=[out])
 
     # try using different optimizers and different optimizer configs
@@ -120,31 +118,4 @@ def build_model():
 
 
 model = build_model()
-# keras_backend.set_session(tf_debug.TensorBoardDebugWrapperSession(tf.Session(), "localhost:6007"))
-tensorboard = TensorBoard(log_dir='./%s_logs' % experiment, batch_size=batch_size,
-                          # embeddings_freq=5,
-                          # embeddings_layer_names=emb_names,
-                          # embeddings_metadata='metadata.tsv',
-                          # embeddings_data=x_test
-                          )
-csv_logger = CSVLogger('logs/%s_training.csv' % experiment)
-early_stopping = EarlyStopping(monitor='val_loss', patience=4)
-config = tf.ConfigProto()
-config.gpu_options.per_process_gpu_memory_fraction = 0.2
-set_session(tf.Session(config=config))
-model.summary()
-print('Train...')
-
-model.fit([x_train1, x_train2], y_train,
-          batch_size=batch_size,
-          callbacks=[tensorboard, csv_logger, early_stopping],
-          epochs=epochs,
-          validation_data=([x_test1, x_test2], y_test)
-          )
-eval_res = model.evaluate([x_test1, x_test2], y_test, batch_size=batch_size)
-y_p = model.predict([x_test1, x_test2])
-print('Test evaluation:')
-print(model.metrics_names)
-print(eval_res)
-print(y_p)
-model.save('models/%s_model' % experiment)
+run_model(experiment, model, [x_train1, x_train2], [y_train], [x_test1, x_test2], [y_test])
