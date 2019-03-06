@@ -25,6 +25,7 @@ import tensorflow as tf
 from tensorflow.python import debug as tf_debug
 from keras.backend.tensorflow_backend import set_session
 
+sys.path.append('/home/liwenjie/liwenjie/projects/lwjpaper')
 from kerascode.NNUtils import *
 from kerascode.configure import *
 from kerascode.NNoperator import run_model
@@ -45,7 +46,7 @@ timeseries = ['student_id_int', 'timeslot_week', 'placei']
 feature_count = len(features)
 timeseries_count = len(timeseries)
 labels = ['placei']
-labels_cates = [consum[f].drop_duplicates().count() for f in labels]
+label_cates = [consum[f].drop_duplicates().count() for f in labels]
 emb_feat_cates = [consum[f].drop_duplicates().count() for f in features]
 emb_feat_names = ['emb_feat_%s' % f for f in features]
 emb_timeseries_cates = [consum[f].drop_duplicates().count() for f in timeseries]
@@ -102,7 +103,7 @@ def build_model():
         branch_outputs.append(nextlayer)
     branch_outputs.append(lstm3)
     merge1 = keras.layers.concatenate(branch_outputs)
-    out = Dense(labels_cates[0], activation='softmax')(merge1)
+    out = Dense(label_cates[0], activation='softmax')(merge1)
 
     model = Model(inputs=[timeseries_inp, fea_inp], outputs=[out])
 

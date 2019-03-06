@@ -116,9 +116,9 @@ def build_model():
 
     out_place = Dense(label_cates[0], activation='softmax', name='out_place')(lstm1)
     out_amount = Dense(label_cates[0], activation='tanh')(lstm1)
-    out_amount = Dense(1, activation='sigmoid', name='out_amount')(out_amount)
+    out_amount = Dense(1, activation='relu', name='out_amount')(out_amount)
     out_time = Dense(label_cates[0], activation='tanh')(lstm1)
-    out_time = Dense(1, activation='sigmoid', name='out_time')(out_time)
+    out_time = Dense(1, activation='relu', name='out_time')(out_time)
 
     model = Model(inputs=[timeseries_inp], outputs=[out_place, out_amount, out_time])
 
@@ -131,4 +131,5 @@ def build_model():
 
 
 model = build_model()
+
 run_model(experiment, model, [x_train1], [y_train1, y_train2, y_train3], [x_test1], [y_test1, y_test2, y_test3])

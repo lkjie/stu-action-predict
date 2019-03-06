@@ -107,7 +107,7 @@ def build_model():
         branch_outputs.append(nextlayer)
     timeseries_x = keras.layers.concatenate(branch_outputs)
 
-    lstm1 = GRU(256, dropout=0.2, recurrent_dropout=0.2)(timeseries_x)
+    lstm1 = GRU(512, dropout=0.2, recurrent_dropout=0.2)(timeseries_x)
 
     branch_outputs = []
     fea_inp = Input(shape=(feature_count,), dtype='int32')
@@ -128,7 +128,7 @@ def build_model():
     model = Model(inputs=[timeseries_inp, fea_inp], outputs=[out])
 
     # try using different optimizers and different optimizer configs
-    model.compile(loss=sparse_focal_loss,
+    model.compile(loss='sparse_categorical_crossentropy',
                   optimizer='adam',
                   metrics=[top1, top3, top5, top10])
     return model

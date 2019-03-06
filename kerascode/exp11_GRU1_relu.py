@@ -101,7 +101,7 @@ def sparse_focal_loss(y_true, y_pred):
 
 def build_model():
     print('Build model...')
-    timeseries_inp = Input(shape=(timestep_len, timeseries_count), dtype='int32')
+    timeseries_inp = Input(shape=(timestep_len, timeseries_count), dtype='float32')
     branch_outputs = []
     for i in range(timeseries_count):
         out = Lambda(lambda x: x[:, :, i])(timeseries_inp)
@@ -110,6 +110,8 @@ def build_model():
                                   mask_zero=False,
                                   trainable=True,
                                   name=emb_timeseries_names[i])(out)
+        elif timeseries[i] == 'amount':
+            nextlayer = Reshape(target_shape=(timestep_len, 1))(out)
         else:
             nextlayer = OneHot(input_dim=emb_timeseries_cates[i], input_length=timestep_len)(out)
         branch_outputs.append(nextlayer)
@@ -125,6 +127,8 @@ def build_model():
             nextlayer = Embedding(input_dim=emb_feat_cates[i], output_dim=12, mask_zero=False,
                                   trainable=True,
                                   name=emb_feat_names[i])(out)
+        elif features[i] == 'amount':
+            nextlayer = Reshape(target_shape=(timestep_len, 1))(out)
         else:
             nextlayer = OneHot(input_dim=emb_feat_cates[i], input_length=1)(out)
 
@@ -146,4 +150,8 @@ def build_model():
 
 
 model = build_model()
-run_model(experiment, model, [x_train1, x_train2], [y_train1, y_train2], [x_test1, x_test2], [y_test1, y_test2])
+#
+# from keras.utils import plot_model
+# plot_model(model, to_file='model11.png')
+
+run_model(experiment, model, [x_train1, x_train2], [y_train1, y_train2], [x_test1, x_test2], [y_test1, y_test2], early_stop='multi')

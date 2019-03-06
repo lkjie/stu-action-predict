@@ -51,7 +51,7 @@ timeseries = ['student_id_int', 'timeslot_week', 'placei']
 feature_count = len(features)
 timeseries_count = len(timeseries)
 labels = ['placei']
-labels_cates = [consum[f].drop_duplicates().count() for f in labels]
+label_cates = [consum[f].drop_duplicates().count() for f in labels]
 emb_feat_cates = [consum[f].drop_duplicates().count() for f in features]
 emb_feat_names = ['emb_feat_%s' % f for f in features]
 emb_timeseries_cates = [consum[f].drop_duplicates().count() for f in timeseries]
@@ -86,7 +86,7 @@ def sparse_focal_loss(y_true, y_pred):
     '''
     y_true = tf.reshape(y_true, [-1])
     y_true = tf.cast(y_true, dtype='int64')
-    y_true = tf.one_hot(y_true, labels_cates[0])
+    y_true = tf.one_hot(y_true, label_cates[0])
     res = focal_loss_noalpha(y_pred, y_true)
     return res
 
@@ -119,7 +119,7 @@ def build_model():
 
     branch_outputs.append(lstm1)
     merge1 = keras.layers.concatenate(branch_outputs)
-    out = Dense(labels_cates[0], activation='softmax')(merge1)
+    out = Dense(label_cates[0], activation='softmax')(merge1)
 
     model = Model(inputs=[timeseries_inp, fea_inp], outputs=[out])
 

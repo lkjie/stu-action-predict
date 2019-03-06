@@ -50,7 +50,7 @@ labels = ['placei']
 
 feature_count = len(features)
 timeseries_count = len(timeseries)
-labels_cates = [consum[f].drop_duplicates().count() for f in labels]
+label_cates = [consum[f].drop_duplicates().count() for f in labels]
 emb_feat_cates = [consum[f].drop_duplicates().count() for f in features]
 emb_feat_names = ['emb_feat_%s' % f for f in features]
 emb_timeseries_cates = [consum[f].drop_duplicates().count() for f in timeseries]
@@ -85,7 +85,7 @@ def sparse_focal_loss(y_true, y_pred):
     '''
     y_true = tf.reshape(y_true, [-1])
     y_true = tf.cast(y_true, dtype='int64')
-    y_true = tf.one_hot(y_true, labels_cates[0])
+    y_true = tf.one_hot(y_true, label_cates[0])
     res = focal_loss(y_pred, y_true)
     return res
 
@@ -122,7 +122,7 @@ def build_model():
         branch_outputs.append(nextlayer)
     branch_outputs.append(lstm1)
     merge1 = keras.layers.concatenate(branch_outputs)
-    out = Dense(labels_cates[0], activation='softmax')(merge1)
+    out = Dense(label_cates[0], activation='softmax')(merge1)
 
     model = Model(inputs=[timeseries_inp, fea_inp], outputs=[out])
 
@@ -134,31 +134,5 @@ def build_model():
 
 
 model = build_model()
-# keras_backend.set_session(tf_debug.TensorBoardDebugWrapperSession(tf.Session(), "localhost:6007"))
-tensorboard = TensorBoard(log_dir='./%s_logs' % experiment, batch_size=batch_size,
-                          # embeddings_freq=5,
-                          # embeddings_layer_names=emb_names,
-                          # embeddings_metadata='metadata.tsv',
-                          # embeddings_data=x_test
-                          )
-csv_logger = CSVLogger('logs/%s_training.csv' % experiment)
-early_stopping = EarlyStopping(monitor='val_loss', patience=4)
-config = tf.ConfigProto()
-config.gpu_options.per_process_gpu_memory_fraction = 0.2
-set_session(tf.Session(config=config))
-model.summary()
-print('Train...')
 
-model.fit([x_train1, x_train2], y_train,
-          batch_size=batch_size,
-          callbacks=[tensorboard, csv_logger, early_stopping],
-          epochs=15,
-          validation_data=([x_test1, x_test2], y_test)
-          )
-eval_res = model.evaluate([x_test1, x_test2], y_test, batch_size=batch_size)
-y_p = model.predict([x_test1, x_test2])
-print('Test evaluation:')
-print(model.metrics_names)
-print(eval_res)
-print(y_p)
-model.save('models/%s_model' % experiment)
+run_model(experiment, model, [x_train1, x_train2], [y_train], [x_test1, x_test2], [y_test])

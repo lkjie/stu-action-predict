@@ -50,7 +50,7 @@ timeseries = ['timeslot_week', 'placei', 'student_id_int']
 feature_count = len(features)
 timeseries_count = len(timeseries)
 labels = ['placei']
-labels_cates = [consum[f].drop_duplicates().count() for f in labels]
+label_cates = [consum[f].drop_duplicates().count() for f in labels]
 # emb_feat_cates = [consum[f].drop_duplicates().count() for f in features]
 # emb_feat_names = ['emb_feat_%s'%f for f in features]
 emb_timeseries_cates = [consum[f].drop_duplicates().count() for f in timeseries]
@@ -90,7 +90,7 @@ def build_model():
 
     lstm1 = LSTM(1024, dropout=0.2, recurrent_dropout=0.2, return_sequences=True)(timeseries_x)
     lstm2 = LSTM(256, dropout=0.2, recurrent_dropout=0.2)(lstm1)
-    out = Dense(labels_cates[0], activation='softmax')(lstm2)
+    out = Dense(label_cates[0], activation='softmax')(lstm2)
 
     model = Model(inputs=[timeseries_inp], outputs=[out])
 

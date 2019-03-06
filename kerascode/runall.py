@@ -12,13 +12,13 @@ files = os.listdir(root_dir)
 
 exclude_files = ['runall.py', 'test.py', 'NNUtils.py', 'imdb_lstm.py', 'configure.py']
 run_files = [
-    'exp3_GRU1.py',
+    # 'exp3_GRU1.py',
     # 'exp3_GRU.py',
     # 'exp3.py',
-    # 'exp5.py',
+    'exp5.py',
     # 'exp6.py',
     # 'exp7.py',
-    # 'exp8.py',
+    'exp8.py',
     # 'exp9_GRU1_128_focalloss.py',
     # 'exp9_GRU1_512_focalloss.py',
     # 'exp9_GRU1_emb12.py',
@@ -27,7 +27,7 @@ run_files = [
     # 'exp9_GRU1_focalloss_noalpha.py',
     # 'exp9_GRU1_focalloss_onlypos.py',
     # 'exp9_GRU1_focalloss.py',
-    'exp9_GRU1_focalloss_sgd.py',
+    # 'exp9_GRU1_focalloss_sgd.py',
     # 'exp9_GRU1.py',
     # 'exp9_GRU2.py',
     # 'exp9_lstm1.py',
@@ -36,12 +36,13 @@ run_files = [
     # 'exp10_GRU1.py',
     # 'exp11_GRU1.py',
     # 'exp11_GRU1_relu.py',
-
+    'exp12_GRU1.py',
+    'exp13_GRU1.py',
 ]
 
 files = list(filter(lambda f: os.path.isfile(f) and f not in exclude_files and f.endswith('.py'), files))
 
-bsize = 1
+bsize = 4
 
 # for i in range(0, len(files), bsize):
 #     processes = []

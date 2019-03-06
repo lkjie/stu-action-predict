@@ -65,7 +65,6 @@ class TimeWindow:
         :param stunums:学号列表
         :return:
         '''
-        stulen = len(student_id_list)
         stuidlist = pd.Series(student_id_list)
         if stuidlist.empty:
             logging.error('TimeWindow Init: student id is NULL!')
@@ -73,6 +72,7 @@ class TimeWindow:
             stuidlist = stuidlist.drop_duplicates()
             logging.warning('TimeWindow Init: student id has duplicated, already drop duplicates!')
         self.stuidlist = stuidlist.tolist()
+        stulen = len(self.stuidlist)
         self.stuid_index_map = {k: i for i, k in enumerate(self.stuidlist)}
         self.cc_matrix = sparse.dok_matrix((stulen, stulen), dtype=np.int16)
 
@@ -87,21 +87,19 @@ class TimeWindow:
         if len(self.timewindow) == 0:
             self.timewindow.append([stuid, stutime, location])
             return
-        first_time = self.timewindow[0][1]
+        # remove all oldest items over 2 mins
+        while (stutime - self.timewindow[0][1] > datetime.timedelta(minutes=2)):
+            self.timewindow.pop(0)
+            if len(self.timewindow) == 0:
+                self.timewindow.append([stuid, stutime, location])
+                return
         # if there is a stuid in timewindow same as the newone
         for record in self.timewindow:
             if stuid == record[0]:
                 self.timewindow.remove(record)
+                # 将旧数据更新为新数据，同时返回，不添加共现次数（前面已经算过）
                 self.timewindow.append([stuid, stutime, location])
                 return
-        if stutime - first_time < datetime.timedelta(minutes=2):
-            pass
-        else:
-            # remove all oldest items over 2 mins
-            while (stutime - self.timewindow[0][1] >= datetime.timedelta(minutes=2)):
-                self.timewindow.pop(0)
-                if len(self.timewindow) == 0:
-                    break
         self.__addConcurrence(stuid, location)
         self.timewindow.append([stuid, stutime, location])
 
@@ -112,26 +110,23 @@ class TimeWindow:
             stu1_location = record[2]
             if stu1_location == location:
                 stu1_index = self.stuid_index_map[stu1]
+                # keep lower index first
                 if stu1_index < stuid_index:
-                    # keep lower matrix
-                    tmp = stu1_index
-                    stu1_index = stuid_index
-                    stuid_index = tmp
-                self.cc_matrix[stuid_index, stu1_index] += 1
+                    self.cc_matrix[stu1_index, stuid_index] += 1
+                else:
+                    self.cc_matrix[stuid_index, stu1_index] += 1
 
     def calc_matrix(self, df):
+        df = df.reset_index(drop=True)
         for index, row in df.iterrows():
-            try:
-                # 显示进度
-                if index % 1000 == 0:
-                    logging.info('Social calc_matrix in process: %4.2f%%, %d in %d' % (
+            # 显示进度
+            if index % 1000 == 0:
+                logging.info('Social calc_matrix in process: %4.2f%%, %d in %d' % (
                     index / df.shape[0] * 100, index, df.shape[0]))
-                stuid = str(row['student_id'])
-                stutime = row['brush_time']
-                location = row['category'] + row['location']
-                self.__addOneRecord(stuid, stutime, location)
-            except Exception as e:
-                logging.error(e)
+            stuid = str(row['student_id'])
+            stutime = row['brush_time']
+            location = row['place0']
+            self.__addOneRecord(stuid, stutime, location)
         # self.cc_matrix = self.cc_matrix.tocsr()
         logging.info("TimeWindow calc matrix DONE!")
 

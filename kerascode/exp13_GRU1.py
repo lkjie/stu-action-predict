@@ -83,7 +83,7 @@ def sparse_focal_loss(y_true, y_pred):
 
 def time_loss(y_true, y_pred):
     '''
-    多标签分类的focal_loss，输入target_tensor为一个正整数，表示类别
+    超过24小时的loss计算为24小时
     :param prediction_tensor:
     :param target_tensor:
     :param weights:
@@ -121,7 +121,7 @@ def build_model():
 
     # out_place = Dense(label_cates[0], activation='softmax', name='out_place')(lstm1)
     out_time = Dense(label_cates[0], activation='tanh')(lstm1)
-    out_time = Dense(1, activation='sigmoid', name='out_time')(out_time)
+    out_time = Dense(1, activation='relu', name='out_time')(out_time)
 
     model = Model(inputs=[timeseries_inp], outputs=[out_time])
 

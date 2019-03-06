@@ -82,7 +82,7 @@ def build_model():
     x = keras.layers.concatenate([id_emb, time_onehot])
     lstm1 = GRU(1024, dropout=0.2, recurrent_dropout=0.2, return_sequences=True)(x)
     lstm2 = GRU(256, dropout=0.2, recurrent_dropout=0.2)(lstm1)
-    out = Dense(label_cates, activation='softmax')(lstm2)
+    out = Dense(label_cates[0], activation='softmax')(lstm2)
 
     model = Model(inputs=[id_inp, time_inp], outputs=[out])
 

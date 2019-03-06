@@ -38,8 +38,7 @@ experiment = get_experiment_name(experiment)
 
 print('Loading data...')
 
-features = ['timeslot_week',
-            ]
+features = ['timeslot_week', ]
 timeseries = ['student_id_int', 'timeslot_week', 'placei', 'amount']
 
 feature_count = len(features)
@@ -51,7 +50,7 @@ emb_feat_names = ['emb_feat_%s' % f for f in features]
 emb_timeseries_cates = [consum[f].drop_duplicates().count() for f in timeseries]
 emb_timeseries_names = ['emb_timeseries_%s' % f for f in timeseries]
 
-xlist, currlist, ylist = load_data_expftl(features, timeseries, labels, 9)
+xlist, currlist, ylist = load_data_expftl(features, timeseries, labels, 10)
 if stratify:
     unique, counts = np.unique(ylist, return_counts=True)
     idy = np.isin(ylist, unique[counts > 1]).reshape(-1)
@@ -70,7 +69,7 @@ print(len(x_test1), 'test sequences')
 
 def build_model():
     print('Build model...')
-    timeseries_inp = Input(shape=(timestep_len, timeseries_count), dtype='int32')
+    timeseries_inp = Input(shape=(timestep_len, timeseries_count), dtype='float32')
     branch_outputs = []
     for i in range(timeseries_count):
         out = Lambda(lambda x: x[:, :, i])(timeseries_inp)
@@ -79,6 +78,8 @@ def build_model():
                                   mask_zero=False,
                                   trainable=True,
                                   name=emb_timeseries_names[i])(out)
+        elif timeseries[i] == 'amount':
+            nextlayer = Reshape(target_shape=(timestep_len, 1))(out)
         else:
             nextlayer = OneHot(input_dim=emb_timeseries_cates[i], input_length=timestep_len)(out)
         branch_outputs.append(nextlayer)
@@ -94,6 +95,8 @@ def build_model():
             nextlayer = Embedding(input_dim=emb_feat_cates[i], output_dim=12, mask_zero=False,
                                   trainable=True,
                                   name=emb_feat_names[i])(out)
+        elif features[i] == 'amount':
+            nextlayer = Reshape(target_shape=(timestep_len, 1))(out)
         else:
             nextlayer = OneHot(input_dim=emb_feat_cates[i], input_length=1)(out)
 
@@ -101,14 +104,14 @@ def build_model():
 
     branch_outputs.append(lstm1)
     merge1 = keras.layers.concatenate(branch_outputs)
-    out = Dense(label_cates, activation='softmax')(merge1)
+    out = Dense(1)(merge1)
 
     model = Model(inputs=[timeseries_inp, fea_inp], outputs=[out])
 
     # try using different optimizers and different optimizer configs
-    model.compile(loss='sparse_categorical_crossentropy',
+    model.compile(loss='mse',
                   optimizer='adam',
-                  metrics=[top1, top3, top5, top10])
+                  metrics=['mse', 'mae'])
     return model
 
 

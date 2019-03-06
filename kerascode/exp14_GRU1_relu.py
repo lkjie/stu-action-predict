@@ -30,45 +30,47 @@ from kerascode.configure import *
 from kerascode.NNoperator import run_model
 
 '''
-预测金额，通过学号的序列预测序列
+同时预测地点与金额
 '''
 
 experiment = os.path.basename(__file__).replace('.py', '')
 experiment = get_experiment_name(experiment)
 
-print('task name: %s' % experiment)
 print('Loading data...')
 
-# features = ['amount', 'card_id', 'student_id_int', 'remained_amount', 'timeslot']
-features = ['timeslot_week',
-            # 'amount',
-            # 'remained_amount',
-            # 'trans_type',
-            # 'category'
-            ]
-timeseries = ['student_id_int', 'timeslot_week', 'placei']
+features = ['timeslot_week']
+timeseries = ['student_id_int', 'timeslot_week', 'placei', 'amount']
 
 feature_count = len(features)
 timeseries_count = len(timeseries)
-labels = ['placei']
-labels_cates = [consum[f].drop_duplicates().count() for f in labels]
+labels = ['placei', 'amount']
+label_cates = [consum[f].drop_duplicates().count() for f in labels]
 emb_feat_cates = [consum[f].drop_duplicates().count() for f in features]
 emb_feat_names = ['emb_feat_%s' % f for f in features]
 emb_timeseries_cates = [consum[f].drop_duplicates().count() for f in timeseries]
 emb_timeseries_names = ['emb_timeseries_%s' % f for f in timeseries]
 
-xlist, currlist, ylist = load_data_expftl(features, timeseries, labels, 9)
+xlist, currlist, ylist = load_data_expftl(features, timeseries, labels, 11)
+placelist = ylist[:, 0]
+amountlist = ylist[:, 1]
 if stratify:
-    unique, counts = np.unique(ylist, return_counts=True)
-    idy = np.isin(ylist, unique[counts > 1]).reshape(-1)
+    unique, counts = np.unique(placelist, return_counts=True)
+    idy = np.isin(placelist, unique[counts > 1]).reshape(-1)
     ylist = ylist[idy]
     xlist = xlist[idy]
+    placelist = placelist[idy]
+    amountlist = amountlist[idy]
     currlist = currlist[idy]
-    x_train1, x_test1, x_train2, x_test2, y_train, y_test = train_test_split(xlist, currlist, ylist, test_size=0.2,
-                                                                             random_state=42, stratify=ylist)
+    x_train1, x_test1, x_train2, x_test2, y_train1, y_test1, y_train2, y_test2 = train_test_split(xlist, currlist,
+                                                                                                  placelist, amountlist,
+                                                                                                  test_size=0.2,
+                                                                                                  random_state=42,
+                                                                                                  stratify=placelist)
 else:
-    x_train1, x_test1, x_train2, x_test2, y_train, y_test = train_test_split(xlist, currlist, ylist, test_size=0.2,
-                                                                             random_state=42)
+    x_train1, x_test1, x_train2, x_test2, y_train1, y_test1, y_train2, y_test2 = train_test_split(xlist, currlist,
+                                                                                                  placelist, amountlist,
+                                                                                                  test_size=0.2,
+                                                                                                  random_state=42)
 
 print(len(x_train1), 'train sequences')
 print(len(x_test1), 'test sequences')
@@ -77,23 +79,36 @@ print(len(x_test1), 'test sequences')
 def sparse_focal_loss(y_true, y_pred):
     '''
     多标签分类的focal_loss，输入target_tensor为一个正整数，表示类别
-    :param prediction_tensor: 
-    :param target_tensor: 
-    :param weights: 
-    :param alpha: 
-    :param gamma: 
-    :return: 
+    :param prediction_tensor:
+    :param target_tensor:
+    :param weights:
+    :param alpha:
+    :param gamma:
+    :return:
     '''
     y_true = tf.reshape(y_true, [-1])
     y_true = tf.cast(y_true, dtype='int64')
-    y_true = tf.one_hot(y_true, labels_cates[0])
-    res = focal_loss(y_pred, y_true)
+    y_true = tf.one_hot(y_true, label_cates[0])
+    res = focal_loss_noalpha(y_pred, y_true)
     return res
+
+
+def place_to_mount(x):
+    '''
+    cause ERROR : can't pickle _thread.RLock objects
+    Python cannot pickle lambda expressions. You may want to try replacing them (e.g. the one you passed to your Lambda layer) with named functions, as @lyxm suggested.
+    so i do it
+    '''
+    prior_place = np.ones(label_cates[0], dtype=np.float32)
+    prior_place[9] = 0
+    prior_place[25] = 0
+    # prior_place_weights = tf.Variable(prior_place, trainable=False)
+    return x * prior_place
 
 
 def build_model():
     print('Build model...')
-    timeseries_inp = Input(shape=(timestep_len, timeseries_count), dtype='int32')
+    timeseries_inp = Input(shape=(timestep_len, timeseries_count), dtype='float32')
     branch_outputs = []
     for i in range(timeseries_count):
         out = Lambda(lambda x: x[:, :, i])(timeseries_inp)
@@ -102,12 +117,14 @@ def build_model():
                                   mask_zero=False,
                                   trainable=True,
                                   name=emb_timeseries_names[i])(out)
+        elif timeseries[i] == 'amount':
+            nextlayer = Reshape(target_shape=(timestep_len, 1))(out)
         else:
             nextlayer = OneHot(input_dim=emb_timeseries_cates[i], input_length=timestep_len)(out)
         branch_outputs.append(nextlayer)
     timeseries_x = keras.layers.concatenate(branch_outputs)
 
-    lstm1 = GRU(128, dropout=0.2, recurrent_dropout=0.2)(timeseries_x)
+    lstm1 = GRU(256, dropout=0.2, recurrent_dropout=0.2)(timeseries_x)
 
     branch_outputs = []
     fea_inp = Input(shape=(feature_count,), dtype='int32')
@@ -117,22 +134,29 @@ def build_model():
             nextlayer = Embedding(input_dim=emb_feat_cates[i], output_dim=12, mask_zero=False,
                                   trainable=True,
                                   name=emb_feat_names[i])(out)
+        elif features[i] == 'amount':
+            nextlayer = Reshape(target_shape=(timestep_len, 1))(out)
         else:
             nextlayer = OneHot(input_dim=emb_feat_cates[i], input_length=1)(out)
 
         branch_outputs.append(nextlayer)
+
     branch_outputs.append(lstm1)
     merge1 = keras.layers.concatenate(branch_outputs)
-    out = Dense(labels_cates[0], activation='softmax')(merge1)
+    out_place = Dense(label_cates[0], activation='softmax', name='out_place')(merge1)
 
-    model = Model(inputs=[timeseries_inp, fea_inp], outputs=[out])
+    out_amount = Dense(label_cates[0], activation='sigmoid')(merge1)
+    out_amount = Dense(1, activation='relu', name='out_amount')(out_amount)
+
+    model = Model(inputs=[timeseries_inp, fea_inp], outputs=[out_place, out_amount])
 
     # try using different optimizers and different optimizer configs
-    model.compile(loss=sparse_focal_loss,
+    model.compile(loss=[sparse_focal_loss, 'mse'],
                   optimizer='adam',
-                  metrics=[top1, top3, top5, top10])
+                  metrics={'out_place': [top1, top3, top5, top10], 'out_amount': ['mse', 'mae']})
     return model
 
 
 model = build_model()
-run_model(experiment, model, [x_train1, x_train2], [y_train], [x_test1, x_test2], [y_test])
+
+run_model(experiment, model, [x_train1, x_train2], [y_train1, y_train2], [x_test1, x_test2], [y_test1, y_test2])

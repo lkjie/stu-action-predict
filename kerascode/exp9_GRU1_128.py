@@ -51,7 +51,7 @@ timeseries = ['student_id_int', 'timeslot_week', 'placei']
 feature_count = len(features)
 timeseries_count = len(timeseries)
 labels = ['placei']
-labels_cates = [consum[f].drop_duplicates().count() for f in labels]
+label_cates = [consum[f].drop_duplicates().count() for f in labels]
 emb_feat_cates = [consum[f].drop_duplicates().count() for f in features]
 emb_feat_names = ['emb_feat_%s' % f for f in features]
 emb_timeseries_cates = [consum[f].drop_duplicates().count() for f in timeseries]
@@ -86,7 +86,7 @@ def sparse_focal_loss(y_true, y_pred):
     '''
     y_true = tf.reshape(y_true, [-1])
     y_true = tf.cast(y_true, dtype='int64')
-    y_true = tf.one_hot(y_true, labels_cates[0])
+    y_true = tf.one_hot(y_true, label_cates[0])
     res = focal_loss(y_pred, y_true)
     return res
 
@@ -107,7 +107,7 @@ def build_model():
         branch_outputs.append(nextlayer)
     timeseries_x = keras.layers.concatenate(branch_outputs)
 
-    lstm1 = GRU(512, dropout=0.2, recurrent_dropout=0.2)(timeseries_x)
+    lstm1 = GRU(128, dropout=0.2, recurrent_dropout=0.2)(timeseries_x)
 
     branch_outputs = []
     fea_inp = Input(shape=(feature_count,), dtype='int32')
@@ -123,12 +123,12 @@ def build_model():
         branch_outputs.append(nextlayer)
     branch_outputs.append(lstm1)
     merge1 = keras.layers.concatenate(branch_outputs)
-    out = Dense(labels_cates[0], activation='softmax')(merge1)
+    out = Dense(label_cates[0], activation='softmax')(merge1)
 
     model = Model(inputs=[timeseries_inp, fea_inp], outputs=[out])
 
     # try using different optimizers and different optimizer configs
-    model.compile(loss=sparse_focal_loss,
+    model.compile(loss='sparse_categorical_crossentropy',
                   optimizer='adam',
                   metrics=[top1, top3, top5, top10])
     return model

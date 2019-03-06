@@ -60,12 +60,13 @@ timeseries = ['student_id_int', 'timeslot_week', 'placei']
 feature_count = len(features)
 timeseries_count = len(timeseries)
 labels = ['placei']
-labels_cates = [consum[f].drop_duplicates().count() for f in labels]
+label_cates = [consum[f].drop_duplicates().count() for f in labels]
 emb_feat_cates = [consum[f].drop_duplicates().count() for f in features]
 emb_feat_names = ['emb_feat_%s' % f for f in features]
 emb_timeseries_cates = [consum[f].drop_duplicates().count() for f in timeseries]
 emb_timeseries_names = ['emb_timeseries_%s' % f for f in timeseries]
 xlist, currlist, ylist = load_data_expftl(features, timeseries, labels, 9)
+
 if stratify:
     unique, counts = np.unique(ylist, return_counts=True)
     idy = np.isin(ylist, unique[counts > 1]).reshape(-1)
@@ -75,7 +76,7 @@ if stratify:
 
 xlist = xlist.reshape(xlist.shape[0], -1)
 xlist = np.concatenate((xlist, currlist), axis=1)
-ylist = ylist.reshape(-1)
+ylist, indexer = pd.factorize(ylist.reshape(-1))
 x_train, x_test, y_train, y_test = train_test_split(xlist, ylist, test_size=0.2, random_state=42, stratify=ylist)
 
 
@@ -107,21 +108,12 @@ def mertics_acck(y_true, y_pred):
     print(top1, top3, top5, top10)
 
 
-def exp_bayes():
-    from sklearn.naive_bayes import GaussianNB  # Naive bayes
-    priors = consum[labels].value_counts() / consum[labels].sum()
-    model=GaussianNB(priors=priors)
-    model.fit(x_train, y_train)
-    prediction6=model.predict_proba(x_test)
-    mertics_acck(y_test, prediction6)
-
-
 def exp_gbdt():
     train_data = lightgbm.Dataset(x_train, label=y_train, categorical_feature=[i for i in range(x_train.shape[1])])
     test_data = lightgbm.Dataset(x_test, label=y_test)
     parameters = {
         'objective': 'multiclass',
-        "num_class": labels_cates[0],
+        "num_class": label_cates[0],
         'metric': 'multi_logloss',
         'is_unbalance': 'true',
         'boosting': 'gbdt',
@@ -145,11 +137,22 @@ def exp_gbdt():
     mertics_acck(y_test, yp_prob)
 
 
-# print('task 2: lightGBM')
+# print('task 2: lightGBM ', confs)
 # exp_gbdt()
 
-print('task 2: naive_bayes')
-exp_bayes()
+
+
+
+def exp_bayes():
+    from sklearn.naive_bayes import GaussianNB  # Naive bayes
+    model=GaussianNB()
+    model.fit(x_train, y_train)
+    prediction6=model.predict_proba(x_test)
+    mertics_acck(y_test, prediction6)
+
+
+# print('task 2: naive_bayes', confs)
+# exp_bayes()
 
 
 from sklearn.preprocessing import OneHotEncoder
@@ -160,9 +163,8 @@ from sklearn.multiclass import OneVsRestClassifier
 from sklearn.svm import SVC
 
 enc = OneHotEncoder(handle_unknown='ignore')
-x = enc.fit_transform(consum[features])
-y = consum[labels]
-x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42, stratify=y)
+x = enc.fit_transform(xlist)
+x_train, x_test, y_train, y_test = train_test_split(x, ylist, test_size=0.2, random_state=42, stratify=ylist)
 
 
 def exp_logistic():
@@ -172,7 +174,7 @@ def exp_logistic():
     mertics_acck(y_test, prediction1)
 
 
-print('task 2: lr')
+print('task 2: lr', confs)
 exp_logistic()
 
 '''
@@ -180,4 +182,8 @@ exp_logistic()
 top1, top3, top5, top10
 GBDT 0.4640097600650671 0.7181781211874746 0.8049342551172564 0.895485969906466 (timestep_len=10)
 GBDT 0.4763873687624144 0.7475779318172605 0.8354209736916778 0.917872633669788 (timestep_len=5)
+GBDT 0.49822436857708546 0.7746886097696393 0.8595836956180141 0.9350192229124545 (timestep_len=2) loss 1.7667
+NBC 0.13693299282500304 0.2839190887348494 0.40865053305768373 0.6348858891726459 (timestep_len=5)
+NBC 0.30806943295027184 0.48040520013827925 0.5829623189013085 0.7384426821986403 (timestep_len=2)
+LR 0.4966634890371783 0.7765532846562399 0.8644967996731581 0.9427921935071601 (timestep_len=2)
 '''

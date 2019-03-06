@@ -30,34 +30,28 @@ from kerascode.configure import *
 from kerascode.NNoperator import run_model
 
 '''
-预测金额，通过学号的序列预测序列
+预测金额，通过学号的序列预测
 '''
 
 experiment = os.path.basename(__file__).replace('.py', '')
 experiment = get_experiment_name(experiment)
 
-print('task name: %s' % experiment)
 print('Loading data...')
 
-# features = ['amount', 'card_id', 'student_id_int', 'remained_amount', 'timeslot']
 features = ['timeslot_week',
-            # 'amount',
-            # 'remained_amount',
-            # 'trans_type',
-            # 'category'
             ]
-timeseries = ['student_id_int', 'timeslot_week', 'placei']
+timeseries = ['student_id_int', 'timeslot_week', 'placei', 'amount']
 
 feature_count = len(features)
 timeseries_count = len(timeseries)
-labels = ['placei']
+labels = ['amount']
 label_cates = [consum[f].drop_duplicates().count() for f in labels]
 emb_feat_cates = [consum[f].drop_duplicates().count() for f in features]
 emb_feat_names = ['emb_feat_%s' % f for f in features]
 emb_timeseries_cates = [consum[f].drop_duplicates().count() for f in timeseries]
 emb_timeseries_names = ['emb_timeseries_%s' % f for f in timeseries]
 
-xlist, currlist, ylist = load_data_expftl(features, timeseries, labels, 9)
+xlist, currlist, ylist = load_data_expftl(features, timeseries, labels, 10)
 if stratify:
     unique, counts = np.unique(ylist, return_counts=True)
     idy = np.isin(ylist, unique[counts > 1]).reshape(-1)
@@ -74,26 +68,22 @@ print(len(x_train1), 'train sequences')
 print(len(x_test1), 'test sequences')
 
 
-def sparse_focal_loss(y_true, y_pred):
+def place_to_mount(x):
     '''
-    多标签分类的focal_loss，输入target_tensor为一个正整数，表示类别
-    :param prediction_tensor: 
-    :param target_tensor: 
-    :param weights: 
-    :param alpha: 
-    :param gamma: 
-    :return: 
+    cause ERROR : can't pickle _thread.RLock objects
+    Python cannot pickle lambda expressions. You may want to try replacing them (e.g. the one you passed to your Lambda layer) with named functions, as @lyxm suggested.
+    so i do it
     '''
-    y_true = tf.reshape(y_true, [-1])
-    y_true = tf.cast(y_true, dtype='int64')
-    y_true = tf.one_hot(y_true, label_cates[0])
-    res = focal_loss(y_pred, y_true)
-    return res
+    prior_place = np.ones(label_cates[0], dtype=np.float32)
+    prior_place[9] = 0
+    prior_place[25] = 0
+    # prior_place_weights = tf.Variable(prior_place, trainable=False)
+    return x * prior_place
 
 
 def build_model():
     print('Build model...')
-    timeseries_inp = Input(shape=(timestep_len, timeseries_count), dtype='int32')
+    timeseries_inp = Input(shape=(timestep_len, timeseries_count), dtype='float32')
     branch_outputs = []
     for i in range(timeseries_count):
         out = Lambda(lambda x: x[:, :, i])(timeseries_inp)
@@ -102,6 +92,8 @@ def build_model():
                                   mask_zero=False,
                                   trainable=True,
                                   name=emb_timeseries_names[i])(out)
+        elif timeseries[i] == 'amount':
+            nextlayer = Reshape(target_shape=(timestep_len, 1))(out)
         else:
             nextlayer = OneHot(input_dim=emb_timeseries_cates[i], input_length=timestep_len)(out)
         branch_outputs.append(nextlayer)
@@ -110,27 +102,31 @@ def build_model():
     lstm1 = GRU(256, dropout=0.2, recurrent_dropout=0.2)(timeseries_x)
 
     branch_outputs = []
-    fea_inp = Input(shape=(feature_count,), dtype='int32')
+    fea_inp = Input(shape=(feature_count,), dtype='float32')
     for i in range(feature_count):
         out = Lambda(lambda x: x[:, i])(fea_inp)
         if features[i] == 'student_id_int':
             nextlayer = Embedding(input_dim=emb_feat_cates[i], output_dim=12, mask_zero=False,
                                   trainable=True,
                                   name=emb_feat_names[i])(out)
+        elif features[i] == 'amount':
+            nextlayer = Reshape(target_shape=(timestep_len, 1))(out)
         else:
             nextlayer = OneHot(input_dim=emb_feat_cates[i], input_length=1)(out)
 
         branch_outputs.append(nextlayer)
+
     branch_outputs.append(lstm1)
     merge1 = keras.layers.concatenate(branch_outputs)
-    out = Dense(label_cates[0], activation='softmax')(merge1)
+    out_amount = Dense(label_cates[0], activation='sigmoid')(merge1)
+    out_amount = Dense(1, activation='relu', name='out_amount')(out_amount)
 
-    model = Model(inputs=[timeseries_inp, fea_inp], outputs=[out])
+    model = Model(inputs=[timeseries_inp, fea_inp], outputs=[out_amount])
 
     # try using different optimizers and different optimizer configs
-    model.compile(loss=sparse_focal_loss,
+    model.compile(loss='mse',
                   optimizer='adam',
-                  metrics=[top1, top3, top5, top10])
+                  metrics=['mse', 'mae'])
     return model
 
 

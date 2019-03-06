@@ -25,6 +25,7 @@ import tensorflow as tf
 from tensorflow.python import debug as tf_debug
 from keras.backend.tensorflow_backend import set_session
 
+sys.path.append('/home/liwenjie/liwenjie/projects/lwjpaper')
 from kerascode.NNUtils import *
 from kerascode.configure import *
 from kerascode.NNoperator import run_model

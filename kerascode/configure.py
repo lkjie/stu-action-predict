@@ -11,6 +11,7 @@ import multiprocessing
 
 '''
 配置文件，不允许引用其他内部包，防止交叉引用
+所有神经网络均使用如下配置
 '''
 
 # 是否取全量数据
@@ -49,9 +50,9 @@ def get_experiment_name(name):
 
 def load_data():
     if alldata:
-        consum = pd.read_csv('../data/consum_access_feat6m.csv')
+        consum = pd.read_csv(PROJECT_DIR + '/data/consum_access_feat6m.csv')
     else:
-        consum = pd.read_csv('../data/consum_access_feat6m.csv', nrows=nrows)
+        consum = pd.read_csv(PROJECT_DIR + '/data/consum_access_feat6m.csv', nrows=nrows)
     # consum['brush_time'] = pd.to_datetime(consum['brush_time'])
     return consum
 
