@@ -159,16 +159,19 @@ class MyEarlyStopping(Callback):
         return monitors_value
 
 
-def run_model(experiment, model, x_train, y_train, x_test, y_test, early_stop='standard'):
+def run_model(experiment, model, x_train, y_train, x_test, y_test, early_stop='standard', embedding_log=False,
+              embeddings_layer_names=None, embeddings_metadata=None, embeddings_data=None):
     print('Task name: %s' % experiment)
     # keras_backend.set_session(tf_debug.TensorBoardDebugWrapperSession(tf.Session(), "localhost:6007"))
-    tensorboard = TensorBoard(log_dir='./%s_logs' % experiment, batch_size=batch_size,
-                              # embeddings_freq=5,
-                              # embeddings_layer_names=emb_names,
-                              # embeddings_metadata='metadata.tsv',
-                              # embeddings_data=x_test
-                              )
-
+    if embedding_log:
+        tensorboard = TensorBoard(log_dir='./%s_logs' % experiment, batch_size=batch_size,
+                                  embeddings_freq=5,
+                                  embeddings_layer_names=embeddings_layer_names,
+                                  embeddings_metadata=embeddings_metadata,
+                                  embeddings_data=embeddings_data
+                                  )
+    else:
+        tensorboard = TensorBoard(log_dir='./%s_logs' % experiment, batch_size=batch_size)
     # config = tf.ConfigProto()
     # config.gpu_options.per_process_gpu_memory_fraction = 0.2
     config = tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True))
