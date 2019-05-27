@@ -28,7 +28,7 @@ stratify = True
 # 神经网络迭代轮数
 epochs = 40
 
-PROJECT_DIR = '/home/liwenjie/liwenjie/projects/lwjpaper'
+PROJECT_DIR = "/mnt/sdb/liwenjie/myProjects/lwjpaper"
 if alldata:
     confs = 'alldata_batchsize%d_maxlen%d' % (batch_size, timestep_len)
 else:
