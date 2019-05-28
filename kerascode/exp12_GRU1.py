@@ -132,4 +132,4 @@ def build_model():
 
 model = build_model()
 
-run_model(experiment, model, [x_train1], [y_train1, y_train2, y_train3], [x_test1], [y_test1, y_test2, y_test3])
+run_model(experiment, model, [x_train1], [y_train1, y_train2, y_train3], [x_test1], [y_test1, y_test2, y_test3], batch_size=batch_size, epochs=epochs)

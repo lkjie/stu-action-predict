@@ -154,4 +154,4 @@ model = build_model()
 # from keras.utils import plot_model
 # plot_model(model, to_file='model11.png')
 
-run_model(experiment, model, [x_train1, x_train2], [y_train1, y_train2], [x_test1, x_test2], [y_test1, y_test2], early_stop='multi')
+run_model(experiment, model, [x_train1, x_train2], [y_train1, y_train2], [x_test1, x_test2], [y_test1, y_test2], early_stop='multi', batch_size=batch_size, epochs=epochs)

@@ -130,4 +130,4 @@ model = build_model()
 run_model(experiment, model, [x_train1, x_train2], [y_train], [x_test1, x_test2], [y_test],
           embedding_log=True, embeddings_layer_names=emb_timeseries_names[0],
           embeddings_metadata='/home/liwenjie/liwenjie/projects/lwjpaper/data/consum_access_feat6m_stuids.csv',
-          embeddings_data=[embeddings_data_x, embeddings_data_curr])
+          embeddings_data=[embeddings_data_x, embeddings_data_curr], batch_size=batch_size, epochs=epochs)

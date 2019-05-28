@@ -6,29 +6,31 @@ __author__ = 'lkjie'
 import pandas as pd
 import pymysql, logging, os
 import sys, datetime
-from sqlalchemy import create_engine
 import numpy as np
-from dateutil.relativedelta import relativedelta
-from scipy.stats import norm
 import matplotlib.pyplot as plt
 import queue, json, time, dateutil, math
-from collections import namedtuple
 import json
+import keras
+import tensorflow as tf
+import warnings
+
+from collections import namedtuple
 from sklearn.model_selection import train_test_split
 from keras.preprocessing import sequence
 from keras.models import Sequential, Model
 from keras.layers import Dense, Embedding, Reshape
 from keras.layers import GRU, Input, Lambda
 from keras.callbacks import TensorBoard, CSVLogger, EarlyStopping
-import keras
-import tensorflow as tf
 from tensorflow.python import debug as tf_debug
 from keras.backend.tensorflow_backend import set_session
-import warnings
-
-from kerascode.configure import batch_size, epochs
 from keras.callbacks import Callback
+from sqlalchemy import create_engine
+from dateutil.relativedelta import relativedelta
+from scipy.stats import norm
 
+'''
+工具文件，不允许引用其他内部包，防止交叉引用
+'''
 
 class MyEarlyStopping(Callback):
     """
@@ -160,7 +162,7 @@ class MyEarlyStopping(Callback):
 
 
 def run_model(experiment, model, x_train, y_train, x_test, y_test, early_stop='standard', embedding_log=False,
-              embeddings_layer_names=None, embeddings_metadata=None, embeddings_data=None):
+              embeddings_layer_names=None, embeddings_metadata=None, embeddings_data=None, batch_size=32, epochs=40):
     print('Task name: %s' % experiment)
     # keras_backend.set_session(tf_debug.TensorBoardDebugWrapperSession(tf.Session(), "localhost:6007"))
     if embedding_log:

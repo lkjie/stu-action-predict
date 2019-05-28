@@ -109,7 +109,7 @@ def main(label_location, timestep_split_len):
     print(len(x_train1), 'train sequences')
     print(len(x_test1), 'test sequences')
     model = build_model()
-    run_model(experiment, model, [x_train1, x_train2], [y_train], [x_test1, x_test2], [y_test])
+    run_model(experiment, model, [x_train1, x_train2], [y_train], [x_test1, x_test2], [y_test], batch_size=batch_size, epochs=epochs)
 
 if __name__ == '__main__':
     timestep_split_len = 2

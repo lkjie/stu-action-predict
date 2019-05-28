@@ -94,4 +94,4 @@ def build_model():
 
 
 model = build_model()
-run_model(experiment, model, x, y_train, x_t, y_test)
+run_model(experiment, model, x, y_train, x_t, y_test, batch_size=batch_size, epochs=epochs)
